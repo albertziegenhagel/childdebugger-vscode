@@ -1,0 +1,6 @@
+LIBRARY      "ChildDebugger.DLL"
+
+EXPORTS
+	DllCanUnloadNow		PRIVATE
+	DllGetClassObject	PRIVATE
+

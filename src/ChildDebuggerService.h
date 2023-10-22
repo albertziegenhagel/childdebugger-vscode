@@ -1,7 +1,8 @@
 #pragma once
 
 #include <array>
-// #include <vector>
+#include <vector>
+#include <string>
 
 #include <fstream>
 
@@ -57,6 +58,7 @@ public:
 private:
     std::ofstream logFile;
     std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> createProcessFunctionNames;
+    std::vector<std::string> no_suspend_exe_names;
     // std::vector<CComPtr<Microsoft::VisualStudio::Debugger::Breakpoints::DkmRuntimeInstructionBreakpoint>> breakpoints;
     // CComPtr<AttachCompletedRoutine> attachCompleted;
 };

@@ -2,6 +2,8 @@
 #include <cassert>
 #include <thread>
 #include <chrono>
+#include <filesystem>
+#include <memory>
 
 #include <iostream> // TODO: remove
 
@@ -14,6 +16,9 @@
 #include <atlbase.h>
 #include <atlcom.h>
 #include <atlctl.h>
+
+#include <tlhelp32.h>
+#include <psapi.h>
 
 #include <vsdebugeng.h>
 #include <vsdebugeng.templates.h>
@@ -51,6 +56,30 @@ std::string utf8_encode(const std::wstring& input)
     assert(bytes_converted != 0);
 
     return result;
+}
+
+std::optional<std::filesystem::path> get_current_module_path()
+{
+    HMODULE current_module = NULL;
+    if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&get_current_module_path, &current_module) == FALSE) return std::nullopt;
+
+    WCHAR buffer[MAX_PATH]; // FIXME: handle paths longer than MAX_PATH
+    const auto result_size = GetModuleFileNameW(current_module, buffer, MAX_PATH);
+    if(result_size == 0) return std::nullopt;
+
+    const auto result = std::filesystem::path(buffer).parent_path();
+    if(result.empty()) return std::nullopt;
+
+    return result;
+}
+
+bool contains_any(std::string_view input, const std::vector<std::string>& entries)
+{
+    for(const auto& entry : entries)
+    {
+        if(input.contains(entry)) return true;
+    }
+    return false;
 }
 
 // void STDMETHODCALLTYPE CChildDebuggerService::OnComplete(
@@ -101,6 +130,14 @@ public:
         }
     }
 };
+
+#ifdef CreateProcess
+#   undef CreateProcess
+#endif
+
+#ifdef CreateProcessAsUser
+#   undef CreateProcessAsUser
+#endif
 
 enum class CreateFunctionType
 {
@@ -165,10 +202,56 @@ public:
     }
 };
 
+std::optional<std::vector<std::string>> read_no_suspend(const std::filesystem::path& no_suspend_file_path)
+{
+    std::ifstream no_suspend_file(no_suspend_file_path);
+
+    if(!no_suspend_file.is_open()) return std::nullopt;
+
+    std::vector<std::string> result;
+    std::string line;
+    while(std::getline(no_suspend_file, line))
+    {
+        if(line.empty()) continue;
+        if(line.starts_with('#')) continue;
+        result.push_back(line);
+    }
+    return result;
+}
 
 CChildDebuggerService::CChildDebuggerService()
 {
-    logFile.open(R"(childdebuglog.txt)", std::ios::out | std::ios::app);
+    const auto* const log_file_name    = "ChildDebugger.log";
+    const auto* const no_suspend_file_name = "ChildDebugger-no_suspend.txt";
+
+    const auto root = get_current_module_path();
+
+    const auto log_file_path = root ? (*root / log_file_name) : log_file_name;
+    logFile.open(log_file_path, std::ios::out | std::ios::app);
+
+    const auto no_suspend_file_path = root ? (*root / no_suspend_file_name) : no_suspend_file_name;
+    if(std::filesystem::is_regular_file(no_suspend_file_path))
+    {
+        auto no_suspend_data = read_no_suspend(no_suspend_file_path);
+        if(no_suspend_data == std::nullopt)
+        {
+            logFile << "Failed to load no-suspend executable names from " << no_suspend_file_path.string() << std::endl;
+        }
+        else
+        {
+            no_suspend_exe_names = std::move(*no_suspend_data);
+            logFile << "Loaded no-suspend executable names from " << no_suspend_file_path.string() << ":\n";
+            for(const auto& name : no_suspend_exe_names)
+            {
+                logFile << "  " << name << "\n";
+            }
+            logFile.flush();
+        }
+    }
+    else
+    {
+        logFile << "Skip loading no-suspend executable names from non-existent file " << no_suspend_file_path.string() << std::endl;
+    }
 
     DkmString::Create(L"CreateProcessW", &createProcessFunctionNames[0]);
     DkmString::Create(L"CreateProcessA", &createProcessFunctionNames[1]);
@@ -191,7 +274,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
     return S_OK;
 }
 
-struct CreateProcessWStack
+struct CreateProcessStack
 {
     UINT64 returnAddress;
 
@@ -219,7 +302,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     bool HasException,
     DkmEventDescriptorS* pEventDescriptor)
 {
-    logFile << "OnRuntimeBreakpoint:\n";
+    logFile << "OnRuntimeBreakpoint (Debugger PID " << GetCurrentProcessId() << ")\n";
     logFile.flush();
 
     HRESULT hr;
@@ -229,10 +312,9 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
 
     if(inInfo)
     {
-        logFile << "  Start CreateProcess: W " << inInfo->GetIsUnicode() << " Func " << (int)inInfo->GetFunctionType() << "\n";
+        logFile << "  In PID " << pThread->Process()->LivePart()->Id << ": Start CreateProcess: W " << inInfo->GetIsUnicode() << " Func " << (int)inInfo->GetFunctionType() << "\n";
         logFile.flush();
 
-        assert(inInfo->GetIsUnicode()); // Not yet implemented
         assert(inInfo->GetFunctionType() == CreateFunctionType::CreateProcess); // Not yet implemented
 
         UINT64 returnAddress;
@@ -243,28 +325,46 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         CONTEXT context;
         hr = pThread->GetContext(CONTEXT_CONTROL | CONTEXT_INTEGER, &context, sizeof(CONTEXT));
 
-        CreateProcessWStack stack;
-        hr = pThread->Process()->ReadMemory(context.Rsp, DkmReadMemoryFlags::None, &stack, sizeof(CreateProcessWStack), nullptr);
+        CreateProcessStack stack;
+        hr = pThread->Process()->ReadMemory(context.Rsp, DkmReadMemoryFlags::None, &stack, sizeof(CreateProcessStack), nullptr);
+
+        bool noSuspend = false;
 
         CAutoDkmArray<BYTE> applicationNameArray;
-        hr = pThread->Process()->ReadMemoryString(context.Rcx, DkmReadMemoryFlags::None, 2, 0x8000, &applicationNameArray);
-        const auto applicationName = reinterpret_cast<wchar_t*>(applicationNameArray.Members);
-
-        logFile << "  APP " << (applicationName ? utf8_encode(applicationName) : "") << "\n";
+        hr = pThread->Process()->ReadMemoryString(context.Rcx, DkmReadMemoryFlags::None, inInfo->GetIsUnicode() ? 2 : 1, 0x8000, &applicationNameArray);
+        if(inInfo->GetIsUnicode())
+        {
+            const auto applicationName = reinterpret_cast<wchar_t*>(applicationNameArray.Members);
+            logFile << "  APP " << (applicationName ? utf8_encode(applicationName) : "") << "\n";
+        }
+        else
+        {
+            const auto applicationName = reinterpret_cast<char*>(applicationNameArray.Members);
+            logFile << "  APP " << (applicationName ? applicationName : "") << "\n";
+        }
         logFile.flush();
 
         CAutoDkmArray<BYTE> commandLineArray;
-        hr = pThread->Process()->ReadMemoryString(context.Rdx, DkmReadMemoryFlags::None, 2, 0x8000, &commandLineArray);
-        const auto commandLine = reinterpret_cast<wchar_t*>(commandLineArray.Members);
-
-        logFile << "  CL " << (commandLine ? utf8_encode(commandLine) : "") << "\n";
+        hr = pThread->Process()->ReadMemoryString(context.Rdx, DkmReadMemoryFlags::None, inInfo->GetIsUnicode() ? 2 : 1, 0x8000, &commandLineArray);
+        if(inInfo->GetIsUnicode())
+        {
+            const auto commandLine = reinterpret_cast<wchar_t*>(commandLineArray.Members);
+            logFile << "  CL " << (commandLine ? utf8_encode(commandLine) : "") << "\n";
+            if(commandLine && contains_any(utf8_encode(commandLine), no_suspend_exe_names)) noSuspend = true;
+        }
+        else
+        {
+            const auto commandLine = reinterpret_cast<char*>(commandLineArray.Members);
+            logFile << "  CL " << (commandLine ? commandLine : "") << "\n";
+            if(commandLine && contains_any(commandLine, no_suspend_exe_names)) noSuspend = true;
+        }
         logFile.flush();
 
         CComPtr<DkmInstructionAddress> address;
         hr = pThread->Process()->CreateNativeInstructionAddress(returnAddress, &address);
 
         bool suspended = false;
-        if((stack.dwCreationFlags & CREATE_SUSPENDED) == 0)
+        if((stack.dwCreationFlags & CREATE_SUSPENDED) == 0 && !noSuspend)
         {
             suspended = true;
             const auto newFlags = stack.dwCreationFlags | CREATE_SUSPENDED;
@@ -272,9 +372,14 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
             CAutoDkmArray<BYTE> newFlagsBytes;
             DkmAllocArray(sizeof(stack.dwCreationFlags), &newFlagsBytes);
             memcpy(newFlagsBytes.Members, &newFlags, sizeof(stack.dwCreationFlags));
-            hr = pThread->Process()->WriteMemory(context.Rsp + offsetof(CreateProcessWStack, dwCreationFlags), newFlagsBytes);
-            
+            hr = pThread->Process()->WriteMemory(context.Rsp + offsetof(CreateProcessStack, dwCreationFlags), newFlagsBytes);
+
             logFile << "  Force suspended start\n";
+            logFile.flush();
+        }
+        else
+        {
+            logFile << "  Originally requested suspended start\n";
             logFile.flush();
         }
 
@@ -288,7 +393,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     }
     else
     {
-        logFile << "  Finish CreateProcess" << "\n";
+        logFile << "  In PID " << pThread->Process()->LivePart()->Id << ": Finish CreateProcess" << "\n";
         logFile.flush();
 
         CComPtr<CreateOutInfo> outInfo;
@@ -297,19 +402,39 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         PROCESS_INFORMATION procInfo;
         hr = pThread->Process()->ReadMemory(outInfo->GetProcessInformationAddress(), DkmReadMemoryFlags::None, &procInfo, sizeof(PROCESS_INFORMATION), nullptr);
 
-        CComPtr<DkmString> messageStr;
-        hr = DkmString::Create((L"ChildProcessDebugger: attach to child PID " + std::to_wstring(procInfo.dwProcessId) + (outInfo->GetSuspended() ? L" SUSPENDED" : L" RUNNING") + L"\n").c_str(), &messageStr);
-        
-        logFile << "  PROC " << procInfo.dwProcessId << "\n";
+        std::wstring applicationName;
+        const auto processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, procInfo.dwProcessId);
+        if(processHandle)
+        {
+            WCHAR buffer[MAX_PATH];
+            const auto size = GetProcessImageFileNameW(processHandle, buffer, MAX_PATH);
+            if(size > 0)
+            {
+                applicationName = std::filesystem::path(buffer).filename().native();
+            }
+            CloseHandle(processHandle);
+        }
+
+        logFile << "  Child App Name " << utf8_encode(applicationName) << "\n";
+        logFile << "  Child PID " << procInfo.dwProcessId << " TID " << procInfo.dwThreadId << "\n";
+        logFile << "  Child P-HANDLE " << procInfo.hProcess << " T-HANDLE " << procInfo.hThread << "\n";
         logFile.flush();
+
+        CComPtr<DkmString> messageStr;
+        hr = DkmString::Create((L"ChildDebugger: attach to child NAME '" + applicationName + L"' PID " + std::to_wstring(procInfo.dwProcessId) + L" TID " + std::to_wstring(procInfo.dwThreadId) + (outInfo->GetSuspended() ? L" SUSPENDED" : L" RUNNING") + L"\n").c_str(), &messageStr);
 
         CComPtr<DkmUserMessage> message;
         hr = DkmUserMessage::Create(pThread->Connection(), pThread->Process(), DkmUserMessageOutputKind::UnfilteredOutputWindowMessage, messageStr, MB_OK, S_OK, &message);
 
         hr = message->Post();
 
-        UINT32 pExternalSuspensionCount;
-        pThread->Suspend(true, &pExternalSuspensionCount);
+        pRuntimeBreakpoint->Close();
+
+        // Suspend the calling process until the debugger is attached to the child process
+        // UINT32 pExternalSuspensionCount;
+        // pThread->Suspend(true, &pExternalSuspensionCount);
+        // logFile << "  Suspend caller TID " << pThread->SystemPart()->Id << " (PID " << pThread->Process()->LivePart()->Id << ")\n";
+        // logFile.flush();
 
         // if(true)//outInfo->GetSuspended())
         // {
@@ -412,7 +537,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         hr = nativeModuleInstance->FindExportName(functionName, true, &address);
         if(hr != S_OK) continue;
 
-        logFile << "OnModuleInstanceLoad (" << GetCurrentProcessId() << ")\n";
+        logFile << "OnModuleInstanceLoad (Debugger PID " << GetCurrentProcessId() << ")\n";
         logFile << "  " << utf8_encode(pModuleInstance->Name()->Value()) << "\n";
         logFile << "  BA " << pModuleInstance->BaseAddress() << "\n";
         logFile << "  => HAS ADDRESS " << utf8_encode(functionName->Value()) << " @" << address->RVA() << "\n";
@@ -452,10 +577,12 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnProcessCreate(
 {
     if(pProcess->LivePart() == nullptr) return S_OK;
 
-    logFile << "OnProcessCreate (" << GetCurrentProcessId() << ")\n";
+    logFile << "OnProcessCreate (Debugger PID " << GetCurrentProcessId() << ")\n";
     logFile << "  " << utf8_encode(pProcess->Path()->Value()) << "\n";
     logFile << "  PID " << pProcess->LivePart()->Id << "\n";
     logFile.flush();
+
+    if(contains_any(utf8_encode(pProcess->Path()->Value()), no_suspend_exe_names)) return S_OK;
 
     HRESULT hr;
 
@@ -470,21 +597,82 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnProcessCreate(
     logFile << "  HANDLE " << processHandle << "\n";
     logFile.flush();
 
-    if(!hasLoadedNtDll)
+    HANDLE hThreadSnap = INVALID_HANDLE_VALUE; 
+    THREADENTRY32 te32; 
+    
+    // Take a snapshot of all running threads  
+    hThreadSnap = CreateToolhelp32Snapshot( TH32CS_SNAPTHREAD, 0 ); 
+    if( hThreadSnap == INVALID_HANDLE_VALUE ) 
     {
-        const auto status = ImportNtDll();
-        if(!status)
+        logFile << "  CreateToolhelp32Snapshot failed " << hThreadSnap << "\n";
+        logFile.flush();
+    }
+    else
+    {
+        // Fill in the size of the structure before using it. 
+        te32.dwSize = sizeof(THREADENTRY32 ); 
+        
+        // Retrieve information about the first thread,
+        // and exit if unsuccessful
+        if( !Thread32First( hThreadSnap, &te32 ) ) 
         {
-            CloseHandle(processHandle);
-            return S_OK;
+            CloseHandle( hThreadSnap );     // Must clean up the snapshot object!
+            logFile << "  Thread32First failed\n";
+            logFile.flush();
         }
-        hasLoadedNtDll = true;
+        else
+        {
+            // Now walk the thread list of the system,
+            // and display information about each thread
+            // associated with the specified process
+            do 
+            {
+                if(te32.th32OwnerProcessID == pProcess->LivePart()->Id)
+                {
+                    logFile << "  THREAD ID " << te32.th32ThreadID << " OWNER "<< te32.th32OwnerProcessID << "\n";
+                    const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, te32.th32ThreadID);
+                    if(hThread == nullptr)
+                    {
+                        logFile << "  Failed to open thread\n";
+                        logFile.flush();
+                    }
+                    else
+                    {
+                        // do
+                        {
+                            logFile << "  CALL ResumeThread(processHandle)\n";
+                            logFile.flush();
+                            hr = ResumeThread(hThread);
+                            logFile << "  RESULT " << hr << "\n";
+                            logFile.flush();
+                        }
+                        // while(hr > 1 && hr != -1);
+                        CloseHandle(hThread);
+                    }
+                }
+            } while( Thread32Next(hThreadSnap, &te32 ) );
+
+            CloseHandle( hThreadSnap );
+        }
     }
 
-    const auto status = NT_Resume(processHandle);
 
-    logFile << "  STATUS " << status << "\n";
-    logFile.flush();
+
+    // if(!hasLoadedNtDll)
+    // {
+    //     const auto status = ImportNtDll();
+    //     if(!status)
+    //     {
+    //         CloseHandle(processHandle);
+    //         return S_OK;
+    //     }
+    //     hasLoadedNtDll = true;
+    // }
+
+    // const auto status = NT_Resume(processHandle);
+
+    // logFile << "  STATUS " << status << "\n";
+    // logFile.flush();
 
     CloseHandle(processHandle);
 

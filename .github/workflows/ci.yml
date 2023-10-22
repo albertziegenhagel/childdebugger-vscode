@@ -1,7 +1,14 @@
-name: Build
+name: CI
 
 on:
-  push
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  deployments: write
 
 jobs:
   build:
@@ -33,17 +40,30 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build"
+        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build"
 
     - name: Build
       run: |
         cd build
         ninja
 
+    - name: Add build info
+      run: |
+        "ref:    ${{ github.ref_name }}`n" + `
+        "commit: ${{ github.sha }}`n"  + `
+        "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/build/bin/info.txt"
+
     - name: Upload binaries
       uses: actions/upload-artifact@v3
       with:
-        name: childdebugger-concord
+        name: childdebugger-concord-x86_64-windows
         path: |
           ${{ github.workspace }}/build/bin/ChildDebugger.dll
           ${{ github.workspace }}/build/bin/ChildDebugger.vsdconfig
+          ${{ github.workspace }}/build/bin/info.txt
+
+  deploy-head:
+    name: "Deploy head"
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-head.yml

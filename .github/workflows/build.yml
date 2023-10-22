@@ -1,0 +1,49 @@
+name: Build
+
+on:
+  push
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - uses: NuGet/setup-nuget@v1
+
+    - uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: "~3.25.0"
+        ninjaVersion: "^1.11.1"
+
+    - uses: TheMrMilchmann/setup-msvc-dev@v2
+      with:
+        arch: x64
+
+    - name: Install Dependencies
+      run: |
+        nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
+        nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build"
+
+    - name: Build
+      run: |
+        cd build
+        ninja
+
+    - name: Upload binaries
+      uses: actions/upload-artifact@v3
+      with:
+        name: childdebugger-concord
+        path: |
+          ${{ github.workspace }}/build/bin/ChildDebugger.dll
+          ${{ github.workspace }}/build/bin/ChildDebugger.vsdconfig

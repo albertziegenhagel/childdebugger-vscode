@@ -3,6 +3,10 @@ name: Package
 on:
   push
 
+permissions:
+  contents: write
+  deployments: write
+
 jobs:
   package:
     runs-on: windows-latest
@@ -35,10 +39,17 @@ jobs:
       - name: Package
         run: |
           rm concord-extension/childdebugger-concord-x86_64-windows.zip
-          vsce package --target win32-x64
+          vsce package --target win32-x64 --pre-release
+          mv childdebugger-win32-x64-*.vsix childdebugger-win32-x64.vsix
 
       - name: Upload binaries
         uses: actions/upload-artifact@v3
         with: 
           name: childdebugger-win32-x64
           path: ${{ github.workspace }}/*.vsix
+
+  deploy-head:
+    name: "Deploy head"
+    needs: package
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-head.yml

@@ -1,13 +1,24 @@
+# Ignore extension configs
 .vscode/**
+
+# Ignore test files
 .vscode-test/**
 out/**
-node_modules/**
+
+# Ignore source code
 src/**
-.gitignore
+
+# Ignore node modules
+node_modules/**
+
+# Ignore Misc
+.github/**
 .yarnrc
-webpack.config.js
 vsc-extension-quickstart.md
+**/.gitignore
 **/tsconfig.json
+**/tsconfig.node.json
+**/webpack.config.js
 **/.eslintrc.json
 **/*.map
 **/*.ts

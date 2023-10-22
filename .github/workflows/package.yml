@@ -1,0 +1,44 @@
+name: Package
+
+on:
+  push
+
+jobs:
+  package:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install VSCE
+        run: npm install -g @vscode/vsce
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Compile Extension
+        run: npm run compile
+
+      - name: Download concord extension
+        uses: robinraju/release-downloader@v1.8
+        with:
+          repository: albertziegenhagel/childdebugger-concord
+          tag: head
+          fileName: childdebugger-concord-x86_64-windows.zip
+          out-file-path: concord-extension
+          extract: true
+
+      - name: Package
+        run: |
+          rm concord-extension/childdebugger-concord-x86_64-windows.zip
+          vsce package --target win32-x64
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with: 
+          name: childdebugger-win32-x64
+          path: ${{ github.workspace }}/*.vsix

@@ -2,7 +2,16 @@
   "name": "childdebugger",
   "displayName": "Child Process Debugger",
   "description": "Auto-attach debugger to child processes",
+  "license": "MIT",
   "version": "0.0.1",
+  "homepage": "https://github.com/albertziegenhagel/childdebugger-vscode",
+  "bugs": {
+    "url": "https://github.com/albertziegenhagel/childdebugger-vscode/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/albertziegenhagel/childdebugger-vscode.git"
+  },
   "engines": {
     "vscode": "^1.76.0"
   },

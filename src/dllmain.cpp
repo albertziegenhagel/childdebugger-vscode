@@ -2,11 +2,7 @@
 #include <atlcom.h>
 #include <atlctl.h>
 
-#include <vsdebugeng.h>
-#include <vsdebugeng.templates.h>
-
 #include "dllmain.h"
-#include "ntsuspend.h"
 
 CChildDebuggerModule _AtlModule;
 

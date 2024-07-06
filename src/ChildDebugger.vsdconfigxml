@@ -12,7 +12,7 @@
           <Filter>
             <SourceId RequiredValue="0BB89D05-9EAD-4295-9A74-A241583DE420"/>
           </Filter>
-          <Interface Name="IDkmCustomMessageForwardReceiver"/>
+          <!-- <Interface Name="IDkmCustomMessageForwardReceiver"/> -->
           <Interface Name="IDkmRuntimeBreakpointNotification"/>
         </InterfaceGroup>
         <InterfaceGroup>

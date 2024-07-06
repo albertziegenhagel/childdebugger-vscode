@@ -26,7 +26,6 @@ target_sources(ChildDebugger
   PRIVATE
     "src/ChildDebugger.def"
     "src/dllmain.cpp"
-    "src/ntsuspend.cpp"
     "src/ChildDebuggerService.cpp"
 )
 

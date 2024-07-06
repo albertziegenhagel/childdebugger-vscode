@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
         &info,
         &processInfo);
 
-    if(FAILED(result)) return EXIT_FAILURE;
+    if(result == FALSE) return EXIT_FAILURE;
 
     std::cout << "Started process " << callee_path.string() << "; PID " << processInfo.dwProcessId << std::endl;
 

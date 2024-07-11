@@ -8,11 +8,11 @@
 
 int main(int argc, char* argv[])
 {
-    std::cout << "This is CALLEE " << GetCurrentProcessId() << std::endl;
+    std::wcout << L"  CALLEE (" << GetCurrentProcessId() << L"): initialized" << std::endl;
 
-    std::this_thread::sleep_for(std::chrono::seconds(10));
+    std::this_thread::sleep_for(std::chrono::seconds(15));
 
-    std::cout << "End CALLEE " << GetCurrentProcessId() << std::endl;
+    std::wcout << L"  CALLEE (" << GetCurrentProcessId() << L"): terminating" << std::endl;
 
     return EXIT_SUCCESS;
 }

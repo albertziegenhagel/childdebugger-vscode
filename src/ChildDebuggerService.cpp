@@ -19,6 +19,8 @@
 
 #include "ChildDebuggerService.h"
 
+#include "nlohmann/json.hpp"
+
 using namespace Microsoft::VisualStudio::Debugger;
 
 // Source ID for breakpoints that we create for child process debugging.
@@ -42,6 +44,24 @@ std::string utf8_encode(const std::wstring& input)
                                                      input.data(), static_cast<int>(input.size()),
                                                      result.data(), result_size,
                                                      nullptr, nullptr);
+    assert(bytes_converted != 0);
+
+    return result;
+}
+// Takes the UTF-8 encoded input string and returns it as an Wide-Char (UTF-16) encoded string.
+std::wstring utf16_encode(const std::string& input)
+{
+    if(input.empty()) return {};
+
+    const auto result_size = MultiByteToWideChar(CP_UTF8, 0,
+                                                 input.data(), static_cast<int>(input.size()),
+                                                 nullptr, 0);
+    assert(result_size > 0);
+
+    std::wstring result(result_size, L'\0');
+    const auto bytes_converted = MultiByteToWideChar(CP_UTF8, 0,
+                                                     input.data(), static_cast<int>(input.size()),
+                                                     result.data(), result_size);
     assert(bytes_converted != 0);
 
     return result;
@@ -87,6 +107,14 @@ enum class CreateFunctionType
     CreateProcessAsUser,
     CreateProcessWithToken,
     CreateProcessWithLogon
+};
+
+enum class CustomMessageType
+{
+    Settings     = 1,
+    ResumeChild  = 2,
+    ResumeParent = 3,
+    InformChild  = 4,
 };
 
 // Base class for breakpoint information classes.
@@ -190,6 +218,32 @@ public:
     }
 };
 
+
+class __declspec(uuid("{0709D0FC-76B1-44E8-B781-E8C43461CFAC}")) ChildProcessItem :
+    public BaseObject<IDkmDisposableDataItem>
+{
+    bool passedInitialBreakpoint_;
+public:
+    virtual HRESULT __stdcall OnClose() override
+    {
+        return S_OK;
+    }
+
+    explicit ChildProcessItem() :
+        passedInitialBreakpoint_(false)
+    {}
+    
+    bool GetPassedInitialBreakpoint() const
+    {
+        return passedInitialBreakpoint_;
+    }
+
+    void SetPassedInitialBreakpoint()
+    {
+        passedInitialBreakpoint_ = true;
+    }
+};
+
 struct CreateProcessStack
 {
     UINT64 returnAddress;
@@ -208,10 +262,249 @@ struct CreateProcessStack
     UINT64 lpCurrentDirectory;
     UINT64 lpStartupInfo;
     UINT64 lpProcessInformation;
+
+    static DWORD64 getLpApplicationNameFromRegister(const CONTEXT& context)
+    {
+        return context.Rcx;
+    }
+    static DWORD64 getLpCommandLineFromRegister(const CONTEXT& context)
+    {
+        return context.Rdx;
+    }
 };
 
-// TODO: add parameter stack definitions for `CreateProcessAsUser`, `CreateProcessWithToken` and `CreateProcessWithLogon`.
+struct CreateProcessAsUserStack
+{
+    UINT64 returnAddress;
 
+    UINT64 hToken;
+
+    UINT64 lpApplicationName;
+    UINT64 lpCommandLine;
+    UINT64 lpProcessAttributes;
+    UINT64 lpThreadAttributes;
+    UINT8  bInheritHandles;
+    UINT8  Padding1;
+    UINT16 Padding2;
+    UINT32 Padding3;
+    UINT32 dwCreationFlags;
+    UINT32 Padding4;
+    UINT64 lpEnvironment;
+    UINT64 lpCurrentDirectory;
+    UINT64 lpStartupInfo;
+    UINT64 lpProcessInformation;
+    
+    static DWORD64 getLpApplicationNameFromRegister(const CONTEXT& context)
+    {
+        return context.Rdx;
+    }
+    static DWORD64 getLpCommandLineFromRegister(const CONTEXT& context)
+    {
+        return context.R8;
+    }
+};
+
+// TODO: add parameter stack definitions for `CreateProcessWithToken` and `CreateProcessWithLogon`.
+
+
+
+HRESULT readMemoryFromStringAt(
+    DkmProcess* process,
+    DWORD64 address,
+    bool isUnicode,
+    CComPtr<DkmString>& result)
+{
+    if(address == 0) return S_OK;
+
+    CAutoDkmArray<BYTE> bytes;
+    if(process->ReadMemoryString(address, DkmReadMemoryFlags::None, isUnicode ? 2 : 1, 0x8000, &bytes) != S_OK)
+    {
+        return S_FALSE;
+    }
+
+    if(isUnicode)
+    {
+        return DkmString::Create(reinterpret_cast<const wchar_t*>(bytes.Members), &result);
+    }
+    else
+    {
+        return DkmString::Create(CP_ACP, reinterpret_cast<const char*>(bytes.Members),  bytes.Length, &result);
+    }
+}
+
+bool checkAttachToProcess(
+    const ChildDebuggerSettings& settings,
+    std::ofstream& logFile,
+    const CComPtr<DkmString>& applicationName,
+    const CComPtr<DkmString>& commandLine)
+{
+    if(!applicationName && !commandLine) return settings.attachOthers;
+
+    for(const auto& config : settings.processConfigs)
+    {
+        logFile << "  Check process config: " << "\n";
+        logFile << "    applicationName: " << (config.applicationName ? utf8_encode(*config.applicationName) : "<EMPTY>") << "\n";
+        logFile << "    commandLine: " << (config.commandLine ? utf8_encode(*config.commandLine) : "<EMPTY>") << "\n";
+
+        // Skip invalid, empty config
+        if(!config.applicationName && !config.commandLine) continue;
+
+        // If this entry has a process name, but we failed to extract one: skip
+        if(config.applicationName && !applicationName) continue;
+        
+        // If this entry has a command line, but we failed to extract one: skip
+        if(config.commandLine && !commandLine) continue;
+
+        // Check whether we the application name matches
+        if(applicationName)
+        {
+            // The current application name is shorter than the config: it can not match, so skip
+            if(applicationName->Length() < config.applicationName->size()) continue;
+
+            const auto applicationNameFinalPart = std::wstring_view(applicationName->Value(), applicationName->Length()).substr(applicationName->Length() - config.applicationName->size(), config.applicationName->size());
+
+            if(DkmString::CompareOrdinalIgnoreCase(applicationNameFinalPart.data(), config.applicationName->c_str()) != 0) continue;
+        }
+
+        // Check whether we can find the command line
+        if(commandLine && 
+           !std::wstring_view(commandLine->Value(), commandLine->Length()).contains(*config.commandLine)) continue;
+
+        logFile << "    matched. attach: " << config.attach << "\n";
+        logFile.flush();
+        return config.attach;
+    }
+
+    logFile << "  No process config match. attach: " << settings.attachOthers << "\n";
+    logFile.flush();
+    return settings.attachOthers;
+}
+
+template<typename StackType>
+HRESULT handleCallToCreateProcess(
+    const ChildDebuggerSettings& settings,
+    std::ofstream& logFile,
+    DkmThread* pThread,
+    const CONTEXT& context,
+    bool isUnicode)
+{
+    // Extract the application name from the passed arguments.
+    // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
+    // RCX register for `CreateProcessA` and `CreateProcessW`.
+    CComPtr<DkmString> applicationName;
+    if(readMemoryFromStringAt(pThread->Process(), StackType::getLpApplicationNameFromRegister(context), isUnicode, applicationName) != S_OK)
+    {
+        logFile << "  FAILED to read application name argument.\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+    if(applicationName)
+    {
+        logFile << "  APP " << utf8_encode(applicationName->Value()) << "\n";
+        logFile.flush();
+    }
+
+    // Extract the command line from the passed arguments.
+    // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
+    // RDX register for `CreateProcessA` and `CreateProcessW`.
+    CComPtr<DkmString> commandLine;
+    if(readMemoryFromStringAt(pThread->Process(), StackType::getLpCommandLineFromRegister(context), isUnicode, commandLine) != S_OK)
+    {
+        logFile << "  FAILED to read command line argument.\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+    if(commandLine)
+    {
+        logFile << "  CL " << utf8_encode(commandLine->Value()) << "\n";
+        logFile.flush();
+    }
+
+    if(!checkAttachToProcess(settings, logFile, applicationName, commandLine)) return S_OK;
+
+    // The other function arguments are passed on the stack, hence we need to extract it.
+    // Assuming x64 calling conventions, the pointer to the stack frame is stored in the
+    // RSP register.
+    StackType stack;
+    if(pThread->Process()->ReadMemory(context.Rsp, DkmReadMemoryFlags::None, &stack, sizeof(StackType), nullptr) != S_OK)
+    {
+        logFile << "  FAILED to read stack.\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+    logFile << "  dwCreationFlags=" << stack.dwCreationFlags << "\n";
+
+    // If want to suspend the child process and it is not already requested to be suspended
+    // originally, we enforce a suspended process creation.
+    bool forcedSuspension = false;
+    if((stack.dwCreationFlags & CREATE_SUSPENDED) != 0)
+    {
+        logFile << "  Originally requested suspended start\n";
+        logFile.flush();
+    }
+    else if(settings.suspendChildren)
+    {
+        forcedSuspension = true;
+        const UINT32 newFlags = stack.dwCreationFlags | CREATE_SUSPENDED;
+
+        CAutoDkmArray<BYTE> newFlagsBytes;
+        DkmAllocArray(sizeof(stack.dwCreationFlags), &newFlagsBytes);
+        memcpy(newFlagsBytes.Members, &newFlags, sizeof(stack.dwCreationFlags));
+        if(pThread->Process()->WriteMemory(context.Rsp + offsetof(StackType, dwCreationFlags), newFlagsBytes) != S_OK)
+        {
+            logFile << "  FAILED to force suspended start.\n";
+            logFile.flush();
+            return S_FALSE;
+        }
+        logFile << "  Force suspended start\n";
+        logFile.flush();
+    }
+    else
+    {
+        logFile << "  Skip suspended start\n";
+        logFile.flush();
+    }
+
+    // Now, retrieve the return address for this function call.
+    UINT64 returnAddress;
+    UINT64 frameBase;
+    UINT64 vframe;
+    if(pThread->GetCurrentFrameInfo(&returnAddress, &frameBase, &vframe) != S_OK)
+    {
+        logFile << "  FAILED to retrieve function return address.\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+
+    CComPtr<DkmInstructionAddress> address;
+    if(pThread->Process()->CreateNativeInstructionAddress(returnAddress, &address) != S_OK)
+    {
+        logFile << "  FAILED to create native instruction address from function return address.\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+
+    // Create a new breakpoint to be triggered when the child process creation is done.
+    CComPtr<CreateOutInfo> outInfo;
+    outInfo.Attach(new CreateOutInfo(stack.lpProcessInformation, forcedSuspension));
+
+    CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
+    if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(sourceId, nullptr, address, false, outInfo, &breakpoint) != S_OK)
+    {
+        logFile << "  FAILED to create breakpoint!\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+
+    if(breakpoint->Enable() != S_OK)
+    {
+        logFile << "  FAILED to enable breakpoint!\n";
+        logFile.flush();
+        return S_FALSE;
+    }
+
+    return S_OK;
+}
 
 std::optional<std::vector<std::string>> read_no_suspend(const std::filesystem::path& no_suspend_file_path)
 {
@@ -233,51 +526,194 @@ std::optional<std::vector<std::string>> read_no_suspend(const std::filesystem::p
 CChildDebuggerService::CChildDebuggerService()
 {
     const auto* const log_file_name    = "ChildDebugger.log";
-    const auto* const no_suspend_file_name = "ChildDebugger-no_suspend.txt";
 
     const auto root = get_current_module_path();
 
     const auto log_file_path = root ? (*root / log_file_name) : log_file_name;
     logFile.open(log_file_path, std::ios::out | std::ios::app);
 
-    const auto no_suspend_file_path = root ? (*root / no_suspend_file_name) : no_suspend_file_name;
-    if(std::filesystem::is_regular_file(no_suspend_file_path))
+    DkmString::Create(L"CreateProcessW", &createProcessFunctionNames[0]);
+    DkmString::Create(L"CreateProcessA", &createProcessFunctionNames[1]);
+    DkmString::Create(L"CreateProcessAsUserW", &createProcessFunctionNames[2]);
+    DkmString::Create(L"CreateProcessAsUserA", &createProcessFunctionNames[3]);
+    DkmString::Create(L"CreateProcessWithTokenW", &createProcessFunctionNames[4]);
+    DkmString::Create(L"CreateProcessWithLogonW", &createProcessFunctionNames[5]);
+}
+
+template<typename T>
+T try_get_or(const nlohmann::json& json, std::string_view name, T default_value)
+{
+    if(json.count(name) == 0) return default_value;
+    return json.at(name).get<T>();
+}
+
+std::optional<std::wstring> try_get_optional_string(const nlohmann::json& json, std::string_view name)
+{
+    if(json.count(name) == 0) return std::nullopt;
+    const auto str = json.at(name).get<std::string>();
+    return utf16_encode(str);
+}
+
+HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
+        DkmCustomMessage* pCustomMessage,
+        DkmCustomMessage** ppReplyMessage)
+{
+    logFile << "On CustomMessage (Debugger PID " << GetCurrentProcessId() << ")\n";
+    logFile << "  MessageCode " << pCustomMessage->MessageCode() << "\n";
+    logFile.flush();
+
+    switch(CustomMessageType(pCustomMessage->MessageCode()))
     {
-        auto no_suspend_data = read_no_suspend(no_suspend_file_path);
-        if(no_suspend_data == std::nullopt)
+        case CustomMessageType::Settings:
         {
-            logFile << "Failed to load no-suspend executable names from " << no_suspend_file_path.string() << std::endl;
-        }
-        else
-        {
-            no_suspend_exe_names = std::move(*no_suspend_data);
-            logFile << "Loaded no-suspend executable names from " << no_suspend_file_path.string() << ":\n";
-            for(const auto& name : no_suspend_exe_names)
+            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_BSTR) return S_FALSE;
+
+            const auto settingsStr = pCustomMessage->Parameter1()->Value().bstrVal;
+
+            // TODO: if we can find a reasonably small JSON parser library that can handle UTF-16 encoded
+            // strings, we can probably get rid of this transcoding.
+            const auto utf8SettingsStr = utf8_encode(settingsStr);
+
+            try
             {
-                logFile << "  " << name << "\n";
+                const auto settingsJson = nlohmann::json::parse(utf8SettingsStr);
+                
+                settings.enabled = try_get_or(settingsJson, "enabled", false);
+                settings.suspendParents = try_get_or(settingsJson, "suspendParents", true);
+                settings.suspendChildren = try_get_or(settingsJson, "suspendChildren", true);
+                settings.skipInitialBreakpoint = try_get_or(settingsJson, "skipInitialBreakpoint", true);
+                settings.attachOthers = try_get_or(settingsJson, "attachOthers", true);
+
+                settings.processConfigs.clear();
+                if(settingsJson.count("processConfigs") > 0)
+                {
+                    for(const auto& configEntry : settingsJson.at("processConfigs"))
+                    {
+                        settings.processConfigs.push_back(
+                            ProcessConfig{
+                                .applicationName = try_get_optional_string(configEntry, "applicationName"),
+                                .commandLine = try_get_optional_string(configEntry, "commandLine"),
+                                .attach = try_get_or(configEntry, "attachOthers", true)
+                            }
+                        );
+                    }
+                }
+            }
+            catch(const nlohmann::json::parse_error& ex)
+            {
+                logFile << "  Failed to parse JSON settings: " << ex.what() << "\n";
+                logFile.flush();
+            }
+            logFile << "  enabled:               " << settings.enabled << "\n";
+            logFile << "  suspendParents:        " << settings.suspendParents << "\n";
+            logFile << "  suspendChildren:       " << settings.suspendChildren << "\n";
+            logFile << "  skipInitialBreakpoint: " << settings.skipInitialBreakpoint << "\n";
+            logFile << "  attachOthers:          " << settings.attachOthers << "\n";
+            logFile << "  processConfigs:\n";
+            for(const auto& config : settings.processConfigs)
+            {
+                logFile << "    applicationName:        " << (config.applicationName ? utf8_encode(*config.applicationName) : "<EMPTY>") << "\n";
+                logFile << "    commandLine:            " << (config.commandLine ? utf8_encode(*config.commandLine) : "<EMPTY>") << "\n";
+                logFile << "    attach:                 " << config.attach << "\n";
             }
             logFile.flush();
         }
-    }
-    else
-    {
-        logFile << "Skip loading no-suspend executable names from non-existent file " << no_suspend_file_path.string() << std::endl;
-    }
+        break;
+        case CustomMessageType::ResumeChild:
+        case CustomMessageType::InformChild:
+        {
+            if(!settings.enabled) return S_OK;
 
-    DkmString::Create(L"CreateProcessW", &createProcessFunctionNames[0]);
-    DkmString::Create(L"CreateProcessA", &createProcessFunctionNames[1]);
-    // FIXME: implement support for remaining process creation functions and active them here.
-    // DkmString::Create(L"CreateProcessAsUserW", &createProcessFunctionNames[2]);
-    // DkmString::Create(L"CreateProcessAsUserA", &createProcessFunctionNames[3]);
-    // DkmString::Create(L"CreateProcessWithTokenW", &createProcessFunctionNames[4]);
-    // DkmString::Create(L"CreateProcessWithLogonW", &createProcessFunctionNames[5]);
+            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
+            if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
+
+            const auto processId = pCustomMessage->Parameter1()->Value().lVal;
+            const auto threadId = pCustomMessage->Parameter2()->Value().lVal;
+            logFile << "  child PID " << processId << "\n";
+            logFile << "  child TID " << threadId << "\n";
+
+            CComPtr<DkmProcess> process;
+            if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
+            {
+                logFile << "  Failed to find process\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+
+            CComPtr<ChildProcessItem> childInfo;
+            childInfo.Attach(new ChildProcessItem());
+
+            process->SetDataItem(DkmDataCreationDisposition::CreateNew, childInfo);
+
+            if(CustomMessageType(pCustomMessage->MessageCode()) == CustomMessageType::ResumeChild)
+            {
+                const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, threadId);
+                if(hThread == nullptr)
+                {
+                    logFile << "  Failed to open thread\n";
+                    logFile.flush();
+                    return S_FALSE;
+                }
+
+                // Resume the thread.
+                logFile << "  CALL ResumeThread\n";
+                logFile.flush();
+                const auto suspendCount = ResumeThread(hThread);
+                logFile << "  RESULT " << suspendCount << "\n";
+                logFile.flush();
+                CloseHandle(hThread);
+            }
+        }
+        break;
+        case CustomMessageType::ResumeParent:
+        {
+            if(!settings.enabled) return S_OK;
+
+            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
+            if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
+
+            const auto processId = pCustomMessage->Parameter1()->Value().lVal;
+            const auto threadId = pCustomMessage->Parameter2()->Value().lVal;
+            logFile << "  parent PID " << processId << "\n";
+            logFile << "  parent TID " << threadId << "\n";
+
+            CComPtr<DkmProcess> process;
+            if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
+            {
+                logFile << "  Failed to find process\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+
+            CComPtr<DkmThread> thread;
+            if(process->FindSystemThread(threadId, &thread) != S_OK)
+            {
+                logFile << "  Failed to find thread\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+
+            UINT32 external_suspension_count;
+            if(thread->Resume(true, &external_suspension_count) != S_OK)
+            {
+                logFile << "  Failed to resume thread\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+        }
+        break;
+    }
+    return S_OK;
 }
+
 
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
     DkmModuleInstance* pModuleInstance,
     DkmWorkList* pWorkList,
     DkmEventDescriptorS* pEventDescriptor)
 {
+    if(!settings.enabled) return S_OK;
+
     // Check whether the loaded module is one of the Windows core DLLs that provide any of the Win32 API
     // functions for child process creation that we are interested in.
 
@@ -313,8 +749,22 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         logFile << "  Function address " << utf8_encode(functionName->Value()) << " @" << address->RVA() << "\n";
         logFile.flush();
 
-        // FIXME: use correct function type for the current `functionName`.
-        const auto functionType = CreateFunctionType::CreateProcess;
+        // TODO: Simplify this:
+        const auto functionType = [&functionName]() -> CreateFunctionType {
+            if(std::wstring_view(functionName->Value(), functionName->Length()).starts_with(L"CreateProcessWithLogon"))
+            {
+                return CreateFunctionType::CreateProcessWithLogon;
+            }
+            if(std::wstring_view(functionName->Value(), functionName->Length()).starts_with(L"CreateProcessWithToken"))
+            {
+                return CreateFunctionType::CreateProcessWithToken;
+            }
+            if(std::wstring_view(functionName->Value(), functionName->Length()).starts_with(L"CreateProcessAsUser"))
+            {
+                return CreateFunctionType::CreateProcessAsUser;
+            }
+            return CreateFunctionType::CreateProcess;
+        }();
 
         // Attach some information to the breakpoint about the function it has been generated for.
         CComPtr<CreateInInfo> inInfo;
@@ -344,7 +794,12 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     bool HasException,
     DkmEventDescriptorS* pEventDescriptor)
 {
+    if(!settings.enabled) return S_OK;
+
     logFile << "OnRuntimeBreakpoint (Debugger PID " << GetCurrentProcessId() << ")\n";
+    wchar_t szGUID[64] = {0};
+    StringFromGUID2(pRuntimeBreakpoint->SourceId(), szGUID, 64);
+    logFile << "  Source ID:" << utf8_encode(szGUID) << "\n";
     logFile.flush();
 
     CComPtr<CreateInInfo> inInfo;
@@ -370,148 +825,21 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
             return S_FALSE;
         }
 
-        // By default, we will suspend the newly created process.
-        // FIXME: correctly take both, the `lpApplicationName` as well as the `lpCommandLine` arguments
-        //        into account when trying to determine whether a process should be suspended.
-        bool shouldSuspend = true;
-
-        // FIXME: support other creation functions than `CreateProcessA` and `CreateProcessW`.
-        assert(inInfo->GetFunctionType() == CreateFunctionType::CreateProcess);
-
-        // Extract the application name from the passed arguments.
-        // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
-        // RCX register for `CreateProcessA` and `CreateProcessW`.
-        if(context.Rcx != 0)
+        // FIXME: support remaining creation functions `CreateProcessWithToken` and `CreateProcessWithLogon`.
+        if(inInfo->GetFunctionType() == CreateFunctionType::CreateProcess)
         {
-            CAutoDkmArray<BYTE> applicationNameArray;
-            if(pThread->Process()->ReadMemoryString(context.Rcx, DkmReadMemoryFlags::None, inInfo->GetIsUnicode() ? 2 : 1, 0x8000, &applicationNameArray) != S_OK)
-            {
-                logFile << "  FAILED to read application name argument.\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-
-            if(inInfo->GetIsUnicode())
-            {
-                const auto applicationName = reinterpret_cast<wchar_t*>(applicationNameArray.Members);
-                logFile << "  APP " << (applicationName ? utf8_encode(applicationName) : "") << "\n";
-            }
-            else
-            {
-                const auto applicationName = reinterpret_cast<char*>(applicationNameArray.Members);
-                logFile << "  APP " << (applicationName ? applicationName : "") << "\n";
-            }
-            logFile.flush();
+            return handleCallToCreateProcess<CreateProcessStack>(settings, logFile, pThread, context, inInfo->GetIsUnicode());
         }
-
-        // Extract the command line from the passed arguments.
-        // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
-        // RDX register for `CreateProcessA` and `CreateProcessW`.
-        if(context.Rdx != 0)
+        else if(inInfo->GetFunctionType() == CreateFunctionType::CreateProcessAsUser)
         {
-            CAutoDkmArray<BYTE> commandLineArray;
-            if(pThread->Process()->ReadMemoryString(context.Rdx, DkmReadMemoryFlags::None, inInfo->GetIsUnicode() ? 2 : 1, 0x8000, &commandLineArray) != S_OK)
-            {
-                logFile << "  FAILED to read command line argument.\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-            if(inInfo->GetIsUnicode())
-            {
-                const auto commandLine = reinterpret_cast<wchar_t*>(commandLineArray.Members);
-                logFile << "  CL " << (commandLine ? utf8_encode(commandLine) : "") << "\n";
-                if(commandLine && contains_any(utf8_encode(commandLine), no_suspend_exe_names)) shouldSuspend = false;
-            }
-            else
-            {
-                const auto commandLine = reinterpret_cast<char*>(commandLineArray.Members);
-                logFile << "  CL " << (commandLine ? commandLine : "") << "\n";
-                if(commandLine && contains_any(commandLine, no_suspend_exe_names)) shouldSuspend = false;
-            }
-            logFile.flush();
-        }
-
-        // The other function arguments are passed on the stack, hence we need to extract it.
-        // Assuming x64 calling conventions, the pointer to the stack frame is stored in the
-        // RSP register.
-        CreateProcessStack stack;
-        if(pThread->Process()->ReadMemory(context.Rsp, DkmReadMemoryFlags::None, &stack, sizeof(CreateProcessStack), nullptr) != S_OK)
-        {
-            logFile << "  FAILED to read stack.\n";
-            logFile.flush();
-            return S_FALSE;
-        }
-
-        // If want to suspend the child process and it is not already requested to be suspended
-        // originally, we enforce a suspended process creation.
-        bool forcedSuspension = false;
-        if(shouldSuspend && (stack.dwCreationFlags & CREATE_SUSPENDED) == 0)
-        {
-            forcedSuspension = true;
-            const auto newFlags = stack.dwCreationFlags | CREATE_SUSPENDED;
-
-            CAutoDkmArray<BYTE> newFlagsBytes;
-            DkmAllocArray(sizeof(stack.dwCreationFlags), &newFlagsBytes);
-            memcpy(newFlagsBytes.Members, &newFlags, sizeof(stack.dwCreationFlags));
-            if(pThread->Process()->WriteMemory(context.Rsp + offsetof(CreateProcessStack, dwCreationFlags), newFlagsBytes) != S_OK)
-            {
-                logFile << "  FAILED to force suspended start.\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-
-            logFile << "  Force suspended start\n";
-            logFile.flush();
+            return handleCallToCreateProcess<CreateProcessAsUserStack>(settings, logFile, pThread, context, inInfo->GetIsUnicode());
         }
         else
         {
-            logFile << "  Originally requested suspended start\n";
-            logFile.flush();
-        }
-
-        // Now, retrieve the return address for this function call.
-        UINT64 returnAddress;
-        UINT64 frameBase;
-        UINT64 vframe;
-        if(pThread->GetCurrentFrameInfo(&returnAddress, &frameBase, &vframe) != S_OK)
-        {
-            logFile << "  FAILED to retrieve function return address.\n";
+            logFile << "  Unsupported create function type: " << ((int)inInfo->GetFunctionType()) << ".\n";
             logFile.flush();
             return S_FALSE;
         }
-
-        CComPtr<DkmInstructionAddress> address;
-        if(pThread->Process()->CreateNativeInstructionAddress(returnAddress, &address) != S_OK)
-        {
-            logFile << "  FAILED to create native instruction address from function return address.\n";
-            logFile.flush();
-            return S_FALSE;
-        }
-
-        // Create a new breakpoint to be triggered when the child process creation is done.
-        CComPtr<CreateOutInfo> outInfo;
-        outInfo.Attach(new CreateOutInfo(stack.lpProcessInformation, forcedSuspension));
-
-        CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
-        if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(sourceId, nullptr, address, false, outInfo, &breakpoint) != S_OK)
-        {
-            logFile << "  FAILED to create breakpoint!\n";
-            logFile.flush();
-            return S_FALSE;
-        }
-
-        if(breakpoint->Enable() != S_OK)
-        {
-            logFile << "  FAILED to enable breakpoint!\n";
-            logFile.flush();
-            return S_FALSE;
-        }
-
-        // TODO: to make sure all this does not impose any unwanted effects, we should
-        //       suspend the current parent process here, and only resume it when the debugger
-        //       has been attached successfully to the child process.
-
-        return S_OK;
     }
 
     CComPtr<CreateOutInfo> outInfo;
@@ -575,6 +903,20 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         logFile << "  Child P-HANDLE " << procInfo.hProcess << " T-HANDLE " << procInfo.hThread << "\n";
         logFile.flush();
 
+        // To make sure all this does not impose any unwanted effects, we suspend
+        // the current parent process here, and only resume it when the debugger
+        // has been attached successfully to the child process.
+        if(settings.suspendParents)
+        {
+            UINT32 external_suspension_count;
+            if(pThread->Suspend(true, &external_suspension_count))
+            {
+                logFile << "  FAILED to suspend parent process.\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+        }
+        
         // Now comes the real HACK:
         // We need to inform the client (VS Code) about the new child process, so that it can attach to it.
         // Unfortunately `DkmDebugProcessRequest` does not seem to be implemented by the debug adapter used
@@ -587,7 +929,13 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         // The following messages is formatted in such a way, that we can hopefully parse all the information
         // back in the VS Code extension side.
         CComPtr<DkmString> messageStr;
-        if(DkmString::Create((L"ChildDebugger: attach to child NAME '" + applicationName + L"' PID " + std::to_wstring(procInfo.dwProcessId) + L" TID " + std::to_wstring(procInfo.dwThreadId) + (outInfo->GetSuspended() ? L" SUSPENDED" : L" RUNNING") + L"\n").c_str(), &messageStr) != S_OK)
+        if(DkmString::Create((L"ChildDebugger: attach to child NAME '" + applicationName +
+                                L"' PPID " + std::to_wstring(pThread->Process()->LivePart()->Id) +
+                                L" PTID " + std::to_wstring(pThread->SystemPart()->Id) +
+                                L" CPID " + std::to_wstring(procInfo.dwProcessId) +
+                                L" CTID " + std::to_wstring(procInfo.dwThreadId) + 
+                                (outInfo->GetSuspended() ? L" CSUSPENDED" : L"") +
+                                (settings.suspendParents ? L" PSUSPENDED" : L"") + L"\n").c_str(), &messageStr) != S_OK)
         {
             logFile << "  FAILED to create string for message!\n";
             logFile.flush();
@@ -615,79 +963,53 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     return S_OK;
 }
 
-HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnProcessCreate(
-        _In_ DkmProcess* pProcess,
-        _In_ DkmWorkList* pWorkList,
-        _In_ DkmEventDescriptor* pEventDescriptor)
+HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived(
+    _In_ DkmThread*                 pThread,
+    _In_opt_ DkmInstructionAddress* pInstructionAddress,
+    _In_ bool                       ShowAsException,
+    _In_ DkmEventDescriptorS*       pEventDescriptor)
 {
-    if(pProcess->LivePart() == nullptr) return S_OK;
+    if(!settings.enabled) return S_OK;
+    if(!settings.skipInitialBreakpoint) return S_OK;
 
-    logFile << "OnProcessCreate (Debugger PID " << GetCurrentProcessId() << ")\n";
-    logFile << "  " << utf8_encode(pProcess->Path()->Value()) << "\n";
-    logFile << "  PID " << pProcess->LivePart()->Id << "\n";
+    logFile << "On OnEmbeddedBreakpointHitReceived (Debugger PID " << GetCurrentProcessId() << ")\n";
+
+    // The initial breakpoint is in ntdll.dll!LdrpDoDebuggerBreak()
+    if(DkmString::CompareOrdinalIgnoreCase(pInstructionAddress->ModuleInstance()->Name(), L"ntdll.dll") != 0)  return S_OK;
+
+    logFile << "  IN NTDLL\n";
     logFile.flush();
 
-    if(contains_any(utf8_encode(pProcess->Path()->Value()), no_suspend_exe_names)) return S_OK;
+    logFile << " THREAD " << pThread << "\n";
+    logFile.flush();
 
-    // FIXME: The following code resumes all threads of any process that we are starting to debug (except
-    //        if it is ine the "no-suspend" list).
-    //        The idea is that we are resuming child processes that we started suspended, but it has
-    //        multiple issues:
-    //          - We do not know whether this process has actually been started as a child process
-    //            and has been suspended by us or by the original caller of CreateProcess.
-    //          - The debugger seems to stay in a stopped state for the process, even after we resumed
-    //            it here.
+    if(pThread == nullptr) return S_FALSE;
+    logFile << " PROCESS " << pThread->Process() << "\n";
+    logFile.flush();
+    if(pThread->Process() == nullptr) return S_FALSE;
 
-    // Take a snapshot of all running threads
-    const auto hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if(hThreadSnap == INVALID_HANDLE_VALUE)
-    {
-        logFile << "  CreateToolhelp32Snapshot failed " << hThreadSnap << "\n";
-        logFile.flush();
-        return S_FALSE;
-    }
+    logFile << "  Has process\n";
+    logFile.flush();
 
-    // Start by extracting the first thread and iterate over it and all that follow.
-    THREADENTRY32 threadEntry;
-    threadEntry.dwSize = sizeof(THREADENTRY32);
-    if(!Thread32First(hThreadSnap, &threadEntry))
-    {
-        CloseHandle(hThreadSnap);
-        logFile << "  Thread32First failed\n";
-        logFile.flush();
-        return S_FALSE;
-    }
-    do
-    {
-        // Skip threads that do not belong to the process we just attached to.
-        if(threadEntry.th32OwnerProcessID != pProcess->LivePart()->Id) continue;
+    CComPtr<ChildProcessItem> childInfo;
+    pThread->Process()->GetDataItem(&childInfo);
+    if(!childInfo)  return S_OK;
+    
+    logFile << "  Has child info\n";
+    logFile << "    Passed Initial Breakpoint " <<  childInfo->GetPassedInitialBreakpoint() <<"\n";
+    logFile.flush();
 
-        // Get a handle to the thread.
-        logFile << "  THREAD ID " << threadEntry.th32ThreadID << " OWNER "<< threadEntry.th32OwnerProcessID << "\n";
-        const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, threadEntry.th32ThreadID);
-        if(hThread == nullptr)
-        {
-            logFile << "  Failed to open thread\n";
-            logFile.flush();
-            continue;
-        }
+    // Skip if we passed the initial breakpoint already
+    if(childInfo->GetPassedInitialBreakpoint()) return S_OK;
 
-        // Resume the thread.
-        DWORD suspendCount = 0;
-        // do
-        {
-            logFile << "  CALL ResumeThread\n";
-            logFile.flush();
-            suspendCount = ResumeThread(hThread);
-            logFile << "  RESULT " << suspendCount << "\n";
-            logFile.flush();
-        }
-        // while(suspendCount > 1 && suspendCount != -1);
-        CloseHandle(hThread);
+    // This has to be the initial breakpoint, so suppress handling it.
+    pEventDescriptor->Suppress();
 
-    } while(Thread32Next(hThreadSnap, &threadEntry));
+    // Set, that we passed the initial breakpoint for this process.
+    childInfo->SetPassedInitialBreakpoint();
 
-    CloseHandle( hThreadSnap );
+    logFile << "  Suppressed\n";
+    logFile.flush();
 
     return S_OK;
 }

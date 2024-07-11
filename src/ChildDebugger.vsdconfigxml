@@ -12,13 +12,17 @@
           <Filter>
             <SourceId RequiredValue="0BB89D05-9EAD-4295-9A74-A241583DE420"/>
           </Filter>
-          <!-- <Interface Name="IDkmCustomMessageForwardReceiver"/> -->
+          <Interface Name="IDkmCustomMessageForwardReceiver"/>
           <Interface Name="IDkmRuntimeBreakpointNotification"/>
         </InterfaceGroup>
         <InterfaceGroup>
           <NoFilter />
-          <Interface Name="IDkmProcessCreateNotification"/>
+          <Interface Name="IDkmEmbeddedBreakpointHitReceived"/>
         </InterfaceGroup>
+        <!-- <InterfaceGroup>
+          <NoFilter />
+          <Interface Name="IDkmProcessCreateNotification"/>
+        </InterfaceGroup> -->
         <InterfaceGroup>
           <Filter>
             <RuntimeId RequiredValue="ACEC4DF9-31F4-46FD-946D-2194F653FD26"/><!-- Native Runtime -->

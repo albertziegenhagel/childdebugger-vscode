@@ -40,7 +40,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build"
+        cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build"
 
     - name: Build
       run: |
@@ -59,7 +59,12 @@ jobs:
         name: childdebugger-concord-x86_64-windows
         path: |
           ${{ github.workspace }}/build/bin/ChildDebugger.dll
+          ${{ github.workspace }}/build/bin/ChildDebugger.pdb
           ${{ github.workspace }}/build/bin/ChildDebugger.vsdconfig
+          ${{ github.workspace }}/build/tests/bin/caller.exe
+          ${{ github.workspace }}/build/tests/bin/caller.pdb
+          ${{ github.workspace }}/build/tests/bin/callee.exe
+          ${{ github.workspace }}/build/tests/bin/callee.pdb
           ${{ github.workspace }}/build/bin/info.txt
 
   deploy-head:

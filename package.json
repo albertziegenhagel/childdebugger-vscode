@@ -23,6 +23,67 @@
   "activationEvents": [
     "onDebug"
   ],
+  "contributes": {
+    "configuration": [
+      {
+        "title": "Child Debugger",
+        "properties": {
+          "childDebugger.enabled": {
+            "order": 0,
+            "type": "boolean",
+            "default": true,
+            "description": "Enable/disable debugging child processes."
+          },
+          "childDebugger.general.suspendChildren": {
+            "order": 1,
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to force a suspended start of the child process. If suspended by the child processes debugger, they will be resumed as soon as the debugger attached successfully."
+          },
+          "childDebugger.general.suspendParents": {
+            "order": 2,
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to suspend the parent process while we are waiting for the debugger to attach to any of its children."
+          },
+          "childDebugger.general.skipInitialBreakpoint": {
+            "order": 3,
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to skip stopping on the \"initial breakpoint\" during the process initialization of the new child process."
+          },
+          "childDebugger.filter.processes": {
+            "order": 4,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "applicationName": {
+                  "type": "string",
+                  "description": "Matched against the end of the application name (case insensitive)."
+                },
+                "commandLine": {
+                  "type": "string",
+                  "description": "Matched against the full command line."
+                },
+                "attach": {
+                  "type": "boolean",
+                  "description": "Whether to attach to processes created where both."
+                }
+              }
+            },
+            "description": "Allows to filter which processes to attach to."
+          },
+          "childDebugger.filter.attachOthers": {
+            "order": 5,
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to attach to any process launches that did not match any of the explicit filters."
+          }
+        }
+      }
+    ]
+  },
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "npm run package",

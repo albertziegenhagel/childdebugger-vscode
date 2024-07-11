@@ -65,14 +65,13 @@ jobs:
           workflow_conclusion: in_progress
           branch: ${{ github.ref_name }}
           name: childdebugger-concord-x86_64-windows
-          path: bin
           check_artifacts:  true
           search_artifacts: true
 
       - name: Repack release asset
         run: |
           mv ${{ github.workspace }}/bin/info.txt ${{ github.workspace }}/info.txt
-          zip childdebugger-concord-x86_64-windows.zip bin/* info.txt
+          zip childdebugger-concord-x86_64-windows.zip bin/* tests/bin/* info.txt
 
       - name: Upload release asset
         shell: pwsh

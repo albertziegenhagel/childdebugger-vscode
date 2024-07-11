@@ -1,95 +1,227 @@
 import * as vscode from 'vscode';
-// import * as ntsuspend from 'ntsuspend';
 
 var outputChannel = vscode.window.createOutputChannel("ChildDebugger");
 
-export function activate(context: vscode.ExtensionContext) {
+interface EngineProcessConfig {
+	applicationName: string|undefined,
+	commandLine: string|undefined,
+	attach: boolean,
+}
+interface EngineSettings {
+	enabled: boolean,
+	suspendChildren: boolean,
+	suspendParents: boolean,
+	skipInitialBreakpoint: boolean,
 
-	vscode.debug.onDidStartDebugSession((session : vscode.DebugSession) => {
-		if(session.type !== "cppvsdbg") {
-			return;
-		}
-		if('suspended' in session.configuration && session.configuration.suspended) {
-			const processId : number = session.configuration.processId;
-			const threadId : number = session.configuration.threadId;
-			outputChannel.appendLine(`Continue suspended child process ${processId}:`);
-			const args = {
-				threadId: threadId,
-				singleThread: false
-			};
-			session.customRequest("continue", args).then((response)=> {
-				outputChannel.appendLine(`  continue: succeeded: ${response}`);
-			}, (reason) => {
-				outputChannel.appendLine(`  continue: failed: "${reason}"`);
-			});
-		}
-	});
+	processConfigs: EngineProcessConfig[],
+	attachOthers: boolean
+}
+
+interface ChildDebuggerConfigurationExtension {
+	parentProcessId: number;
+	parentThreadId: number;
+	parentSuspended: boolean;
+
+	childProcessId: number;
+	childThreadId: number;
+	childSuspended: boolean;
+}
+
+enum CustomMessageType {
+	settings = 1,
+	resumeChild = 2,
+	resumeParent = 3,
+	informChild = 4,
+}
+
+const childDebuggerSourceId = "{0BB89D05-9EAD-4295-9A74-A241583DE420}";
+
+export function activate(context: vscode.ExtensionContext) {
 
 	vscode.debug.registerDebugAdapterTrackerFactory('*', {
 		createDebugAdapterTracker(session: vscode.DebugSession) {
-		  return {
-			onDidSendMessage: (m) => {
-				if (m.type !== "event" ||
-					m.event !== "output" ||
-					m.body.category !== "console") {
-					return;
+			return {
+				onDidSendMessage: (m) => {
+					if (m.type !== "event" ||
+						m.event !== "output" ||
+						m.body.category !== "console") {
+						return;
+					}
+					// Check whether this is some log message send from the child debugger
+					// vs debug engine extension and skip otherwise
+					const startDebugInitText: string = "ChildDebugger: attach to child ";
+					const output: string = m.body.output;
+					if (!output.startsWith(startDebugInitText)) {
+						return;
+					}
+
+					// Parse the message for the necessary information about the involved
+					// processes/threads.
+					const parentSuspended = output.indexOf(" PSUSPENDED", startDebugInitText.length);
+					const childSuspended = output.indexOf(" CSUSPENDED", startDebugInitText.length);
+					const parentPidRegex = /PPID (\d+)/g;
+					const parentTidRegex = /PTID (\d+)/g;
+					const childPidRegex = /CPID (\d+)/g;
+					const childTidRegex = /CTID (\d+)/g;
+					const nameRegex = /NAME '([^"]*)'/g;
+					const parentPidMatch = output.matchAll(parentPidRegex);
+					const parentTidMatch = output.matchAll(parentTidRegex);
+					const childPidMatch = output.matchAll(childPidRegex);
+					const childTidMatch = output.matchAll(childTidRegex);
+					const nameMatch = output.matchAll(nameRegex);
+					const parentPidStr: string | undefined | null = parentPidMatch.next().value[1];
+					const parentTidStr: string | undefined | null = parentTidMatch.next().value[1];
+					const childPidStr: string | undefined | null = childPidMatch.next().value[1];
+					const childTidStr: string | undefined | null = childTidMatch.next().value[1];
+					let name: string | undefined | null = nameMatch.next().value[1];
+
+					if (!parentPidStr || !parentTidStr || !childPidStr || !childTidStr) {
+						return;
+					}
+
+					if (!name || name.length === 0) {
+						name = "Child"; // default name
+					}
+
+					const parentProcessId = parseInt(parentPidStr);
+					const parentThreadId = parseInt(parentTidStr);
+					const childProcessId = parseInt(childPidStr);
+					const childThreadId = parseInt(childTidStr);
+
+					// Create the debug configuration for the child process debugging session.
+					// We simply add some extended configuration options that should be ignored
+					// by the debug adapter, but we will later use to inform the debug engine
+					// extension that attaching the debugger finished and we can resume the
+					// parent and child processes.
+					const configurationExtension: ChildDebuggerConfigurationExtension = {
+						parentProcessId: parentProcessId,
+						parentThreadId: parentThreadId,
+						parentSuspended: parentSuspended !== -1,
+						childProcessId: childProcessId,
+						childThreadId: childThreadId,
+						childSuspended: childSuspended !== -1,
+					};
+					const configuration: vscode.DebugConfiguration = {
+						type: "cppvsdbg",
+						name: `${name} #${childProcessId}`,
+						request: "attach",
+						processId: childProcessId,
+						childDebuggerExtension: configurationExtension,
+						// symbolOptions: {
+						// 	searchMicrosoftSymbolServer: true,
+						// 	moduleFilter: {
+						// 		mode: "loadAllButExcluded",
+						// 	}
+						// }
+					};
+					const options: vscode.DebugSessionOptions = {
+						parentSession: session,
+						compact: true,
+						lifecycleManagedByParent: true,
+						consoleMode: vscode.DebugConsoleMode.MergeWithParent,
+					};
+
+					// Now, start attaching to the child process.
+					outputChannel.appendLine(`Attempting attach to child process ${childProcessId}`);
+					vscode.debug.startDebugging(undefined, configuration, options).then(() => {
+						// outputChannel.appendLine(`  attach: succeeded`);
+					}, (reason) => {
+						outputChannel.appendLine(`  attach to ${childProcessId}: failed: "${reason}"`);
+					});
 				}
-				const startDebugInitText : string = "ChildDebugger: attach to child ";
-				const output : string = m.body.output;
-				if (!output.startsWith(startDebugInitText)) {
-					return;
-				}
-				const suspended = output.indexOf(" SUSPENDED", startDebugInitText.length);
-
-				const pidRegex = /PID (\d+)/g;
-				const tidRegex = /TID (\d+)/g;
-				const nameRegex = /NAME '([^"]*)'/g;
-				const pidMatch = output.matchAll(pidRegex);
-				const tidMatch = output.matchAll(tidRegex);
-				const nameMatch = output.matchAll(nameRegex);
-				const pidStr: string|undefined|null = pidMatch.next().value[1];
-				const tidStr: string|undefined|null = tidMatch.next().value[1];
-				let name: string|undefined|null = nameMatch.next().value[1];
-
-				if(!pidStr || !tidStr) {
-					return;
-				}
-
-				if(!name || name.length === 0) {
-					name = "Child";
-				}
-
-				const processId = parseInt(pidStr);
-				const threadId = parseInt(tidStr);
-
-				const configuration : vscode.DebugConfiguration = {
-					type : "cppvsdbg",
-					name : `${name} (${processId})`,
-					request : "attach",
-					processId : processId,
-					threadId : threadId,
-					suspended : suspended !== -1
-				};
-				const options : vscode.DebugSessionOptions = {
-					parentSession: session,
-					compact: true,
-					lifecycleManagedByParent: true,
-					consoleMode: vscode.DebugConsoleMode.MergeWithParent,
-					// noDebug: true,
-					// suppressDebugToolbar : true,
-					// suppressDebugStatusbar : true,
-					// suppressDebugView : true
-				};
-				outputChannel.appendLine(`Attempting attach to child ${processId}`);
-				vscode.debug.startDebugging(undefined, configuration, options).then(()=> {
-					outputChannel.appendLine(`  attach: succeeded`);
-				}, (reason) => {
-					outputChannel.appendLine(`  attach: failed: "${reason}"`);
-				});
-			}
-		  };
+			};
 		}
-	  });
+	});
+
+	vscode.debug.onDidStartDebugSession((session: vscode.DebugSession) => {
+		const configuration = vscode.workspace.getConfiguration("childDebugger");
+		if (configuration === null || configuration === undefined) {
+			return;
+		}
+
+		if (!configuration.get<boolean>("enabled", true)) {
+			return;
+		}
+
+		if (session.type !== "cppvsdbg") {
+			return;
+		}
+
+		var processConfigs : EngineProcessConfig[] = [];
+		for (const entry of configuration.get<any[]>("filter.processes", [])) {
+			processConfigs.push({
+				applicationName : entry['applicationName'],
+				commandLine : entry['commandLine'],
+				attach : entry['attach'],
+			});
+		}
+
+		const engineSettings: EngineSettings = {
+			enabled: configuration.get<boolean>("enabled", true),
+
+			suspendChildren: configuration.get<boolean>("general.suspendChildren", true),
+			suspendParents: configuration.get<boolean>("general.suspendParents", true),
+
+			skipInitialBreakpoint: configuration.get<boolean>("general.skipInitialBreakpoint", true),
+
+			processConfigs: processConfigs,
+			attachOthers: configuration.get<boolean>("filter.attachOthers", true),
+		};
+
+		// Send the settings to the debug engine extension in the new session.
+		session.customRequest("vsCustomMessage", {
+			message: {
+				sourceId: childDebuggerSourceId,
+				messageCode: CustomMessageType.settings.valueOf(),
+				parameter1: JSON.stringify(engineSettings),
+			}
+		}).then((response) => {
+		}, (reason) => {
+			outputChannel.appendLine(`  Sending child debugger settings failed: "${reason}"`);
+		});
+
+		// If this is not a debug session that we started for a child process,
+		// there is nothing else we need to do.
+		if (!('childDebuggerExtension' in session.configuration)) {
+			return;
+		}
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = session.configuration.childDebuggerExtension;
+
+		// If the child was suspended, send a request to resume it.
+		if (debuggerConfigExtension.childSuspended || engineSettings.skipInitialBreakpoint) {
+			outputChannel.appendLine(`Resume child process ${debuggerConfigExtension.childProcessId}:`);
+			session.customRequest("vsCustomMessage", {
+				message: {
+					sourceId: childDebuggerSourceId,
+					messageCode: debuggerConfigExtension.childSuspended ? CustomMessageType.resumeChild.valueOf() : CustomMessageType.informChild.valueOf(),
+					parameter1: debuggerConfigExtension.childProcessId,
+					parameter2: debuggerConfigExtension.childThreadId
+				}
+			}).then((response) => {
+				// outputChannel.appendLine(`  vsCustomMessage resume child: succeeded: ${response}`);
+			}, (reason) => {
+				outputChannel.appendLine(`  Resume child message failed: "${reason}"`);
+			});
+		}
+
+		// If the parent was suspended, send a request to resume it.
+		if (debuggerConfigExtension.parentSuspended &&
+			session.parentSession !== undefined) {
+			outputChannel.appendLine(`Resume parent process for ${debuggerConfigExtension.childProcessId}:`);
+			session.parentSession.customRequest("vsCustomMessage", {
+				message: {
+					sourceId: childDebuggerSourceId,
+					messageCode: CustomMessageType.resumeParent.valueOf(),
+					parameter1: debuggerConfigExtension.parentProcessId,
+					parameter2: debuggerConfigExtension.parentThreadId,
+				}
+			}).then((response) => {
+				// outputChannel.appendLine(`  vsCustomMessage resume parent: succeeded: ${response}`);
+			}, (reason) => {
+				outputChannel.appendLine(`  Resume parent message: failed: "${reason}"`);
+			});
+		}
+	});
 }
 
-export function deactivate() {}
+export function deactivate() { }

@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
+import { installVsDbgEngineExtensionIntegration } from './integration';
 
-var outputChannel = vscode.window.createOutputChannel("ChildDebugger");
+const outputChannelName = "Child Debugger";
+
+var outputChannel = vscode.window.createOutputChannel(outputChannelName);
 
 interface EngineProcessConfig {
 	applicationName: string|undefined,
@@ -37,6 +40,16 @@ enum CustomMessageType {
 const childDebuggerSourceId = "{0BB89D05-9EAD-4295-9A74-A241583DE420}";
 
 export function activate(context: vscode.ExtensionContext) {
+
+	if(context.extensionMode === vscode.ExtensionMode.Production) {
+		installVsDbgEngineExtensionIntegration(context.extensionPath).catch().then((value) => {
+			outputChannel.appendLine("Successfully installed VS Debug Engine integration.");
+		}, (reason) => {
+			vscode.window.showErrorMessage(`Failed to install VS Debug Engine integration.\nSee "${outputChannelName}" output channel for more information.`);
+			outputChannel.appendLine("Failed to install VS Debug Engine integration:");
+			outputChannel.appendLine(`  ${reason}`);
+		});
+	}
 
 	vscode.debug.registerDebugAdapterTrackerFactory('*', {
 		createDebugAdapterTracker(session: vscode.DebugSession) {

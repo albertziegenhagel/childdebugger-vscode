@@ -593,7 +593,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
                             ProcessConfig{
                                 .applicationName = try_get_optional_string(configEntry, "applicationName"),
                                 .commandLine = try_get_optional_string(configEntry, "commandLine"),
-                                .attach = try_get_or(configEntry, "attachOthers", true)
+                                .attach = try_get_or(configEntry, "attach", true)
                             }
                         );
                     }

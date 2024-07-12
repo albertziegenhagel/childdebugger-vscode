@@ -1,7 +1,7 @@
 {
   "name": "childdebugger",
   "displayName": "Child Process Debugger",
-  "description": "Auto-attach debugger to child processes",
+  "description": "Auto-attach debugger to child processes for cppvsdbg",
   "author": "Albert Ziegenhagel",
   "publisher": "albertziegenhagel",
   "license": "MIT",

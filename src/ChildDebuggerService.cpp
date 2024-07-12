@@ -349,26 +349,31 @@ bool checkAttachToProcess(
         // Skip invalid, empty config
         if(!config.applicationName && !config.commandLine) continue;
 
-        // If this entry has a process name, but we failed to extract one: skip
-        if(config.applicationName && !applicationName) continue;
-        
-        // If this entry has a command line, but we failed to extract one: skip
-        if(config.commandLine && !commandLine) continue;
-
-        // Check whether we the application name matches
-        if(applicationName)
+        if(config.applicationName)
         {
+            // We failed to extract the application name: skip
+            if(!applicationName) continue;
+
             // The current application name is shorter than the config: it can not match, so skip
             if(applicationName->Length() < config.applicationName->size()) continue;
 
-            const auto applicationNameFinalPart = std::wstring_view(applicationName->Value(), applicationName->Length()).substr(applicationName->Length() - config.applicationName->size(), config.applicationName->size());
+            const auto applicationNameView = std::wstring_view(applicationName->Value(), applicationName->Length());
 
+            const auto applicationNameFinalPart = applicationNameView.substr(applicationName->Length() - config.applicationName->size(), config.applicationName->size());
+
+            // NOTE: we can assume `applicationNameFinalPart.data()` to be null-terminated because it points to the end of the original string.
             if(DkmString::CompareOrdinalIgnoreCase(applicationNameFinalPart.data(), config.applicationName->c_str()) != 0) continue;
         }
 
-        // Check whether we can find the command line
-        if(commandLine && 
-           !std::wstring_view(commandLine->Value(), commandLine->Length()).contains(*config.commandLine)) continue;
+        if(config.commandLine)
+        {
+            // We failed to extract the command line: skip
+            if(!commandLine) continue;
+
+            const auto commandLineView = std::wstring_view(commandLine->Value(), commandLine->Length());
+
+            if(!commandLineView.contains(*config.commandLine)) continue;
+        }
 
         logFile << "    matched. attach: " << config.attach << "\n";
         logFile.flush();

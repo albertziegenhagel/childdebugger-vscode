@@ -14,6 +14,7 @@ struct options
 
     bool suspend = false;
     bool wait = false;
+    bool no_app_name = false;
 
     std::chrono::seconds init_sleep_time    = std::chrono::seconds(1);
     std::chrono::seconds suspend_sleep_time = std::chrono::seconds(30);
@@ -31,6 +32,8 @@ void print_usage()
                << L"  --suspend        Create the child process in suspended stat,\n"
                << L"                   wait for a few seconds, and then resume it.\n"
                << L"  --wait           Wait for the child process to terminate.\n"
+               << L"  --no-app-name    Pass NULL to lpApplicationName and use\n"
+               << L"                   lpcommand_line instead.\n"
                << L"Child Args:\n"
                << L"  Any additionally arguments beyond the '-' will be passed to\n"
                << L"  to the child process.\n";
@@ -68,6 +71,10 @@ options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
         else if(current_arg == L"--wait")
         {
             result.wait = true;
+        }
+        else if(current_arg == L"--no-app-name")
+        {
+            result.no_app_name = true;
         }
         else if(current_arg.starts_with(L"--"))
         {
@@ -107,25 +114,68 @@ options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
     return result;
 }
 
+void append_quoted_command_line_argument(std::wstring& command_line, std::wstring_view arg)
+{
+    // This is based on:
+    //   https://learn.microsoft.com/en-us/archive/blogs/twistylittlepassagesallalike/everyone-quotes-command-line-arguments-the-wrong-way
+
+    if(arg.empty()) return;
+
+    if(!command_line.empty()) command_line.push_back(L' ');
+
+    if(arg.find_first_of(L" \t\n\v\"") == std::wstring_view::npos)
+    {
+        // Simple case: does not need any special handling
+        command_line.append(arg);
+        return;
+    }
+
+    command_line.push_back(L'"');
+
+    for(auto it = arg.begin();; ++it)
+    {
+        std::size_t num_backslashes = 0;
+
+        while(it != arg.end() && *it == L'\\')
+        {
+            ++it;
+            ++num_backslashes;
+        }
+
+        if(it == arg.end())
+        {
+            command_line.append(num_backslashes * 2, L'\\');
+            break;
+        }
+        else if(*it == L'"')
+        {
+            command_line.append(num_backslashes * 2 + 1, L'\\');
+            command_line.push_back(*it);
+        }
+        else
+        {
+            command_line.append(num_backslashes, L'\\');
+            command_line.push_back(*it);
+        }
+    }
+
+    command_line.push_back(L'"');
+}
+
 std::optional<std::wstring> make_command_line(const options& opts)
 {
-    if(opts.child_args.empty()) return std::nullopt;
+    if(opts.child_args.empty() && !opts.no_app_name) return std::nullopt;
 
-    // FIXME: to make this robust, this would require proper escaping!
+    std::wstring command_line;
 
-    std::wstring result;
-    result += L"\"";
-    result += opts.child_path.native();
-    result += L"\"";
+    append_quoted_command_line_argument(command_line, opts.child_path.native());
 
     for(const auto& arg : opts.child_args)
     {
-        result += L" \"";
-        result += arg;
-        result += L"\"";
+        append_quoted_command_line_argument(command_line, arg);
     }
 
-    return result;
+    return command_line;
 }
 
 int wmain(int argc, wchar_t* argv[])
@@ -142,7 +192,8 @@ int wmain(int argc, wchar_t* argv[])
     STARTUPINFOW info={sizeof(info)};
     PROCESS_INFORMATION process_info;
 
-    const auto result = CreateProcessW(opts.child_path.c_str(),
+    const auto result = CreateProcessW(
+        opts.no_app_name ? nullptr : opts.child_path.c_str(),
         command_line ? command_line->data() : nullptr,
         nullptr,
         nullptr,

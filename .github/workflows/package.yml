@@ -33,13 +33,13 @@ jobs:
           repository: albertziegenhagel/childdebugger-concord
           tag: head
           fileName: childdebugger-concord-x86_64-windows.zip
-          out-file-path: concord-extension
+          out-file-path: vsdbg-engine-extension
           extract: true
 
       - name: Package
         run: |
-          rm concord-extension/childdebugger-concord-x86_64-windows.zip
-          rm -r concord-extension/tests
+          rm vsdbg-engine-extension/childdebugger-concord-x86_64-windows.zip
+          rm -r vsdbg-engine-extension/tests
           vsce package --target win32-x64 --pre-release
           mv childdebugger-win32-x64-*.vsix childdebugger-win32-x64.vsix
 

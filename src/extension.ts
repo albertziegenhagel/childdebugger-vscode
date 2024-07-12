@@ -161,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		var processConfigs : EngineProcessConfig[] = [];
-		for (const entry of configuration.get<any[]>("filter.processes", [])) {
+		for (const entry of configuration.get<any[]>("filter.childProcesses", [])) {
 			processConfigs.push({
 				applicationName : entry['applicationName'],
 				commandLine : entry['commandLine'],
@@ -178,7 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
 			skipInitialBreakpoint: configuration.get<boolean>("general.skipInitialBreakpoint", true),
 
 			processConfigs: processConfigs,
-			attachOthers: configuration.get<boolean>("filter.attachOthers", true),
+			attachOthers: configuration.get<boolean>("filter.attachOtherChildren", true),
 		};
 
 		// Send the settings to the debug engine extension in the new session.

@@ -52,7 +52,7 @@
             "default": true,
             "description": "Whether to skip stopping on the \"initial breakpoint\" during the process initialization of the new child process."
           },
-          "childDebugger.filter.processes": {
+          "childDebugger.filter.childProcesses": {
             "order": 4,
             "type": "array",
             "items": {
@@ -74,11 +74,11 @@
             },
             "description": "Allows to filter which processes to attach to."
           },
-          "childDebugger.filter.attachOthers": {
+          "childDebugger.filter.attachOtherChildren": {
             "order": 5,
             "type": "boolean",
             "default": true,
-            "description": "Whether to attach to any process launches that did not match any of the explicit filters."
+            "description": "Whether to attach to any processes that did not match any of the explicit child process filters."
           }
         }
       }

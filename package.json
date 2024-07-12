@@ -20,6 +20,9 @@
   "categories": [
     "Other"
   ],
+  "extensionDependencies": [
+    "ms-vscode.cpptools"
+  ],
   "activationEvents": [
     "onDebug"
   ],

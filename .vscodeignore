@@ -1,24 +1,15 @@
-# Ignore extension configs
-.vscode/**
 
-# Ignore test files
-.vscode-test/**
-out/**
+**
 
-# Ignore source code
-src/**
+!package.json
 
-# Ignore node modules
-node_modules/**
+!LICENSE.*
+!README.*
+!CHANGELOG.*
 
-# Ignore Misc
-.github/**
-.yarnrc
-vsc-extension-quickstart.md
-**/.gitignore
-**/tsconfig.json
-**/tsconfig.node.json
-**/webpack.config.js
-**/.eslintrc.json
-**/*.map
-**/*.ts
+!dist/*.js
+
+!vsdbg-engine-extension/bin/*.dll
+!vsdbg-engine-extension/bin/*.pdb
+!vsdbg-engine-extension/bin/*.vsdconfig
+!vsdbg-engine-extension/info.txt

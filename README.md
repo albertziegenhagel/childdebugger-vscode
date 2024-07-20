@@ -48,7 +48,7 @@ in the beginning of the `DEBUG CONSOLE` output view when debugging any native ap
 
 ## Implementation Details
 
-This extension works by integrating a [VS Debug Engine extension](https://github.com/microsoft/ConcordExtensibilitySamples) that can be found [here](https://github.com/albertziegenhagel/childdebugger-concord).
+This extension works by integrating a [VS Debug Engine extension](https://github.com/microsoft/ConcordExtensibilitySamples) that can be found [here](vsdbg-engine-extension/README.md).
 
 While a process is being debugged it will:
 

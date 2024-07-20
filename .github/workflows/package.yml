@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v3
         with:
@@ -21,33 +23,83 @@ jobs:
       - name: Install VSCE
         run: npm install -g @vscode/vsce
 
-      - name: Install Dependencies
+      - name: Install NPM Dependencies
         run: npm install
 
-      - name: Compile Extension
+      - name: Compile VSCode Extension
         run: npm run compile
 
-      - name: Download concord extension
-        uses: robinraju/release-downloader@v1.8
-        with:
-          repository: albertziegenhagel/childdebugger-concord
-          tag: head
-          fileName: childdebugger-concord-x86_64-windows.zip
-          out-file-path: vsdbg-engine-extension
-          extract: true
+      - uses: NuGet/setup-nuget@v1
 
-      - name: Package
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+  
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+  
+      - name: Install VSDbg Engine Extension Dependencies
         run: |
-          rm vsdbg-engine-extension/childdebugger-concord-x86_64-windows.zip
-          rm -r vsdbg-engine-extension/tests
+          nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
+          nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+  
+      - name: Configure VSDbg Engine Extension
+        run: |
+          mkdir build
+          cd build
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=Debug `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+  
+      - name: Build VSDbg Engine Extension
+        run: |
+          cd build
+          ninja
+
+      - name: Install VSDbg Engine Extension
+        run: |
+          cd build
+          ninja install
+  
+      - name: Add build info
+        run: |
+          "ref:    ${{ github.ref_name }}`n" + `
+          "commit: ${{ github.sha }}`n"  + `
+          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/build/bin/info.txt"
+    
+      - name: Package VSIX
+        run: |
           vsce package --target win32-x64 --pre-release
           mv childdebugger-win32-x64-*.vsix childdebugger-win32-x64.vsix
 
-      - name: Upload binaries
+      - name: Upload extension VSIX
         uses: actions/upload-artifact@v3
         with: 
           name: childdebugger-win32-x64
           path: ${{ github.workspace }}/*.vsix
+
+      - name: Upload test binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: childdebugger-win32-x64-tests
+          path: |
+            ${{ github.workspace }}/build/tests/bin/caller.exe
+            ${{ github.workspace }}/build/tests/bin/caller.pdb
+            ${{ github.workspace }}/build/tests/bin/callee.exe
+            ${{ github.workspace }}/build/tests/bin/callee.pdb
+            ${{ github.workspace }}/build/bin/info.txt
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v3
+        with:
+          name: childdebugger-win32-x64-debug-symbols
+          path: |
+            ${{ github.workspace }}/build/bin/ChildDebugger.pdb
+            ${{ github.workspace }}/build/bin/info.txt
 
   deploy-head:
     name: "Deploy head"

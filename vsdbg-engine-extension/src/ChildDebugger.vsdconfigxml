@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Configuration xmlns="http://schemas.microsoft.com/vstudio/vsdconfig/2008">
+  <NativeComponent
+    ComponentId="93E286B6-E3DA-42CB-83FA-7CF1E42C6700"
+    ComponentLevel="65500"
+    ModuleName="ChildDebugger.dll">
+    <!-- ComponentLevel == Target Computer Component: "Monitor Task Provider"-->
+
+    <Class Name="CChildDebuggerService" ClassId="0C9D5D48-4ABE-48E5-B28C-14571CCD0DF4">
+      <Implements>
+        <InterfaceGroup>
+          <Filter>
+            <SourceId RequiredValue="0BB89D05-9EAD-4295-9A74-A241583DE420"/>
+          </Filter>
+          <Interface Name="IDkmCustomMessageForwardReceiver"/>
+          <Interface Name="IDkmRuntimeBreakpointNotification"/>
+        </InterfaceGroup>
+        <InterfaceGroup>
+          <NoFilter />
+          <Interface Name="IDkmEmbeddedBreakpointHitReceived"/>
+        </InterfaceGroup>
+        <!-- <InterfaceGroup>
+          <NoFilter />
+          <Interface Name="IDkmProcessCreateNotification"/>
+        </InterfaceGroup> -->
+        <InterfaceGroup>
+          <Filter>
+            <RuntimeId RequiredValue="ACEC4DF9-31F4-46FD-946D-2194F653FD26"/><!-- Native Runtime -->
+          </Filter>
+          <Interface Name="IDkmModuleInstanceLoadNotification"/>
+        </InterfaceGroup>
+      </Implements>
+    </Class>
+    
+  </NativeComponent>
+</Configuration>

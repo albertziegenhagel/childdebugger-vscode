@@ -14,18 +14,48 @@ jobs:
         with:
           node-version: 16
 
-      - name: Install Dependencies
+      - name: Install NPM Dependencies
         run: npm install
 
-      - name: Compile Extension
+      - name: Compile VSCode Extension
         run: npm run compile
 
       - name: Run Linter
         run: npm run lint
 
-      - name: Compile Test Sources
+      - uses: NuGet/setup-nuget@v1
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+  
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+  
+      - name: Install VSDbg Engine Extension Dependencies
+        run: |
+          nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
+          nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+  
+      - name: Configure VSDbg Engine Extension
+        run: |
+          mkdir build
+          cd build
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=Debug `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX=vsdbg-engine-extension
+  
+      - name: Build VSDbg Engine Extension
+        run: |
+          cd build
+          ninja
+
+      - name: Compile VSCode Test Sources
         run: npm run pretest
 
-      - name: Run unit tests
+      - name: Run VSCode unit tests
         run: npm run test
-        

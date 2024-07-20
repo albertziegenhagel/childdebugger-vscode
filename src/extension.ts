@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
+import { installVsDbgEngineExtensionIntegration } from './integration';
 
-var outputChannel = vscode.window.createOutputChannel("ChildDebugger");
+const outputChannelName = "Child Debugger";
+
+var outputChannel = vscode.window.createOutputChannel(outputChannelName);
 
 interface EngineProcessConfig {
 	applicationName: string|undefined,
@@ -37,6 +40,16 @@ enum CustomMessageType {
 const childDebuggerSourceId = "{0BB89D05-9EAD-4295-9A74-A241583DE420}";
 
 export function activate(context: vscode.ExtensionContext) {
+
+	if(context.extensionMode === vscode.ExtensionMode.Production) {
+		installVsDbgEngineExtensionIntegration(context.extensionPath).catch().then((value) => {
+			outputChannel.appendLine("Successfully installed VS Debug Engine integration.");
+		}, (reason) => {
+			vscode.window.showErrorMessage(`Failed to install VS Debug Engine integration.\nSee "${outputChannelName}" output channel for more information.`);
+			outputChannel.appendLine("Failed to install VS Debug Engine integration:");
+			outputChannel.appendLine(`  ${reason}`);
+		});
+	}
 
 	vscode.debug.registerDebugAdapterTrackerFactory('*', {
 		createDebugAdapterTracker(session: vscode.DebugSession) {
@@ -148,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		var processConfigs : EngineProcessConfig[] = [];
-		for (const entry of configuration.get<any[]>("filter.processes", [])) {
+		for (const entry of configuration.get<any[]>("filter.childProcesses", [])) {
 			processConfigs.push({
 				applicationName : entry['applicationName'],
 				commandLine : entry['commandLine'],
@@ -165,7 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
 			skipInitialBreakpoint: configuration.get<boolean>("general.skipInitialBreakpoint", true),
 
 			processConfigs: processConfigs,
-			attachOthers: configuration.get<boolean>("filter.attachOthers", true),
+			attachOthers: configuration.get<boolean>("filter.attachOtherChildren", true),
 		};
 
 		// Send the settings to the debug engine extension in the new session.

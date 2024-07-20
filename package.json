@@ -1,11 +1,11 @@
 {
   "name": "childdebugger",
   "displayName": "Child Process Debugger",
-  "description": "Auto-attach debugger to child processes",
+  "description": "Auto-attach debugger to child processes for cppvsdbg",
   "author": "Albert Ziegenhagel",
   "publisher": "albertziegenhagel",
   "license": "MIT",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "homepage": "https://github.com/albertziegenhagel/childdebugger-vscode",
   "bugs": {
     "url": "https://github.com/albertziegenhagel/childdebugger-vscode/issues"
@@ -19,6 +19,9 @@
   },
   "categories": [
     "Other"
+  ],
+  "extensionDependencies": [
+    "ms-vscode.cpptools"
   ],
   "activationEvents": [
     "onDebug"
@@ -52,7 +55,7 @@
             "default": true,
             "description": "Whether to skip stopping on the \"initial breakpoint\" during the process initialization of the new child process."
           },
-          "childDebugger.filter.processes": {
+          "childDebugger.filter.childProcesses": {
             "order": 4,
             "type": "array",
             "items": {
@@ -74,11 +77,11 @@
             },
             "description": "Allows to filter which processes to attach to."
           },
-          "childDebugger.filter.attachOthers": {
+          "childDebugger.filter.attachOtherChildren": {
             "order": 5,
             "type": "boolean",
             "default": true,
-            "description": "Whether to attach to any process launches that did not match any of the explicit filters."
+            "description": "Whether to attach to any processes that did not match any of the explicit child process filters."
           }
         }
       }
@@ -94,7 +97,8 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "vscode:uninstall": "node ./dist/uninstall.js"
   },
   "devDependencies": {
     "@types/glob": "^8.0.0",

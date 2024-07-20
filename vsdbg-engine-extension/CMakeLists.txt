@@ -42,4 +42,16 @@ configure_vs_debug_extension(
     "${CMAKE_CURRENT_BINARY_DIR}/include"
 )
 
+install(
+  TARGETS
+    ChildDebugger
+  RUNTIME DESTINATION bin
+)
+
+install(
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/bin/ChildDebugger.vsdconfig"
+  DESTINATION bin
+)
+
 add_subdirectory(tests)

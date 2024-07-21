@@ -227,25 +227,21 @@ public:
     }
 };
 
-class __declspec(uuid("{0709D0FC-76B1-44E8-B781-E8C43461CFAC}")) ChildProcessItem :
-    public BaseObject<IDkmDisposableDataItem>
+class ATL_NO_VTABLE __declspec(uuid("{0709D0FC-76B1-44E8-B781-E8C43461CFAC}")) ChildProcessDataItem :
+    public IUnknown,
+    public CComObjectRootEx<CComMultiThreadModel>
 {
     bool passedInitialBreakpoint_{false};
 
 public:
-    explicit ChildProcessItem() = default;
+    explicit ChildProcessDataItem() = default;
 
-    ChildProcessItem(ChildProcessItem&)             = delete;
-    ChildProcessItem(ChildProcessItem&&)            = delete;
-    ChildProcessItem& operator=(ChildProcessItem&)  = delete;
-    ChildProcessItem& operator=(ChildProcessItem&&) = delete;
+    ~ChildProcessDataItem() = default;
 
-    ~ChildProcessItem() override = default;
-
-    HRESULT __stdcall OnClose() override
-    {
-        return S_OK;
-    }
+    ChildProcessDataItem(ChildProcessDataItem&)             = delete;
+    ChildProcessDataItem(ChildProcessDataItem&&)            = delete;
+    ChildProcessDataItem& operator=(ChildProcessDataItem&)  = delete;
+    ChildProcessDataItem& operator=(ChildProcessDataItem&&) = delete;
 
     [[nodiscard]] bool get_passed_initial_breakpoint() const
     {
@@ -255,6 +251,24 @@ public:
     void set_passed_initial_breakpoint()
     {
         passedInitialBreakpoint_ = true;
+    }
+
+protected:
+    // NOLINTNEXTLINE(bugprone-reserved-identifier, readability-identifier-naming)
+    HRESULT _InternalQueryInterface(REFIID riid, void** object)
+    {
+        if(object == nullptr)
+            return E_POINTER;
+
+        if(riid == __uuidof(IUnknown))
+        {
+            *object = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        *object = nullptr;
+        return E_NOINTERFACE;
     }
 };
 
@@ -659,10 +673,21 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
             return S_FALSE;
         }
 
-        CComPtr<ChildProcessItem> child_info;
-        child_info.Attach(new ChildProcessItem());
+        CComObject<ChildProcessDataItem>* com_obj;
+        if(auto hr = CComObject<ChildProcessDataItem>::CreateInstance(&com_obj); FAILED(hr))
+        {
+            log_file_ << "  Failed to create child process ComObject instance\n";
+            log_file_.flush();
+            return hr;
+        }
 
-        process->SetDataItem(DkmDataCreationDisposition::CreateNew, child_info);
+        const CComPtr<ChildProcessDataItem> child_info(com_obj);
+        if(auto hr = process->SetDataItem(DkmDataCreationDisposition::CreateNew, child_info); FAILED(hr))
+        {
+            log_file_ << "  Failed to set child process data item\n";
+            log_file_.flush();
+            return hr;
+        }
 
         if(CustomMessageType(custom_message->MessageCode()) == CustomMessageType::resume_child)
         {
@@ -1014,9 +1039,19 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
     log_file_ << "  Has process\n";
     log_file_.flush();
 
-    CComPtr<ChildProcessItem> child_info;
-    thread->Process()->GetDataItem(&child_info);
-    if(!child_info) return S_OK;
+    CComPtr<ChildProcessDataItem> child_info;
+    if(thread->Process()->GetDataItem(&child_info) != S_OK)
+    {
+        log_file_ << "  FAILED to get process child info.\n";
+        log_file_.flush();
+        return S_FALSE;
+    }
+    if(!child_info)
+    {
+        log_file_ << "  NO child info\n";
+        log_file_.flush();
+        return S_OK;
+    }
 
     log_file_ << "  Has child info\n";
     log_file_ << "    Passed Initial Breakpoint " << child_info->get_passed_initial_breakpoint() << "\n";

@@ -1,4 +1,5 @@
 
+#include <cassert>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -21,6 +22,26 @@ struct Options
     std::chrono::seconds final_sleep_time   = std::chrono::seconds(10);
 };
 
+std::string utf16_to_utf8(const std::wstring& input)
+{
+    if(input.empty()) return {};
+
+    const auto result_size = WideCharToMultiByte(CP_UTF8, 0,
+                                                 input.data(), static_cast<int>(input.size()),
+                                                 nullptr, 0,
+                                                 nullptr, nullptr);
+    assert(result_size > 0);
+
+    std::string result(result_size, '\0');
+    const auto  bytes_converted = WideCharToMultiByte(CP_UTF8, 0,
+                                                      input.data(), static_cast<int>(input.size()),
+                                                      result.data(), result_size,
+                                                      nullptr, nullptr);
+    assert(bytes_converted != 0);
+
+    return result;
+}
+
 void print_usage()
 {
     std::wcout << L"Usage: caller.exe <Options> <Path> [- <Child Args>]\n"
@@ -33,7 +54,20 @@ void print_usage()
                << L"                   wait for a few seconds, and then resume it.\n"
                << L"  --wait           Wait for the child process to terminate.\n"
                << L"  --no-app-name    Pass NULL to lpApplicationName and use\n"
-               << L"                   lpcommand_line instead.\n"
+               << L"                   lpCommandLine instead.\n"
+               << L"  --init-time <MS>\n"
+               << L"                   Time to wait for before starting the child\n"
+               << L"                   process. In milliseconds.\n"
+               << L"                   default: 1'000\n"
+               << L"  --suspend-time <MS>\n"
+               << L"                   Time to wait after starting the suspended\n"
+               << L"                   process, before resuming it (only when\n"
+               << L"                   --suspend). In milliseconds.\n"
+               << L"                   default: 30'000\n"
+               << L"  --final-time <MS>\n"
+               << L"                   Time to wait before terminating the app after\n"
+               << L"                   the child process was started. In milliseconds.\n"
+               << L"                   default: 10'000\n"
                << L"Child Args:\n"
                << L"  Any additionally arguments beyond the '-' will be passed to\n"
                << L"  to the child process.\n";
@@ -75,6 +109,42 @@ Options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
         else if(current_arg == L"--no-app-name")
         {
             result.no_app_name = true;
+        }
+        else if(current_arg == L"--init-time")
+        {
+            if(argc <= arg_i + 1) print_error_and_exit(L"Missing argument for --init-time.");
+            const auto next_arg = utf16_to_utf8(argv[++arg_i]);
+
+            std::chrono::milliseconds::rep mills;
+
+            auto chars_result = std::from_chars(next_arg.data(), next_arg.data() + next_arg.size(), mills);
+            if(chars_result.ec != std::errc{}) print_error_and_exit(L"Invalid argument for --init-time.");
+
+            result.init_sleep_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::milliseconds(mills));
+        }
+        else if(current_arg == L"--suspend-time")
+        {
+            if(argc <= arg_i + 1) print_error_and_exit(L"Missing argument for --suspend-time.");
+            const auto next_arg = utf16_to_utf8(argv[++arg_i]);
+
+            std::chrono::milliseconds::rep mills;
+
+            auto chars_result = std::from_chars(next_arg.data(), next_arg.data() + next_arg.size(), mills);
+            if(chars_result.ec != std::errc{}) print_error_and_exit(L"Invalid argument for --suspend-time.");
+
+            result.suspend_sleep_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::milliseconds(mills));
+        }
+        else if(current_arg == L"--final-time")
+        {
+            if(argc <= arg_i + 1) print_error_and_exit(L"Missing argument for --final-time.");
+            const auto next_arg = utf16_to_utf8(argv[++arg_i]);
+
+            std::chrono::milliseconds::rep mills;
+
+            auto chars_result = std::from_chars(next_arg.data(), next_arg.data() + next_arg.size(), mills);
+            if(chars_result.ec != std::errc{}) print_error_and_exit(L"Invalid argument for --final-time.");
+
+            result.final_sleep_time = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::milliseconds(mills));
         }
         else if(current_arg.starts_with(L"--"))
         {

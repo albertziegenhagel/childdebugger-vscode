@@ -1,19 +1,19 @@
 
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <thread>
-#include <chrono>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 struct options
 {
-    std::filesystem::path child_path;
+    std::filesystem::path     child_path;
     std::vector<std::wstring> child_args;
 
-    bool suspend = false;
-    bool wait = false;
+    bool suspend     = false;
+    bool wait        = false;
     bool no_app_name = false;
 
     std::chrono::seconds init_sleep_time    = std::chrono::seconds(1);
@@ -54,8 +54,8 @@ void print_usage()
 
 options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
 {
-    options result;
-    bool    help = false;
+    options                              result;
+    bool                                 help = false;
     std::optional<std::filesystem::path> child_path;
     for(int arg_i = 1; arg_i < argc; ++arg_i)
     {
@@ -188,8 +188,8 @@ int wmain(int argc, wchar_t* argv[])
 
     auto command_line = make_command_line(opts);
 
-    const DWORD creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
-    STARTUPINFOW info={sizeof(info)};
+    const DWORD         creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
+    STARTUPINFOW        info           = {sizeof(info)};
     PROCESS_INFORMATION process_info;
 
     const auto result = CreateProcessW(

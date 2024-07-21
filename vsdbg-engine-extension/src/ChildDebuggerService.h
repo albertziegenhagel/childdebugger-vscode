@@ -1,9 +1,9 @@
 #pragma once
 
 #include <array>
-#include <vector>
-#include <string>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include <fstream>
 
@@ -12,8 +12,8 @@
 struct ProcessConfig
 {
     std::optional<std::wstring> applicationName = std::nullopt;
-    std::optional<std::wstring> commandLine = std::nullopt;
-    bool attach = true;
+    std::optional<std::wstring> commandLine     = std::nullopt;
+    bool                        attach          = true;
 };
 
 struct ChildDebuggerSettings
@@ -26,12 +26,12 @@ struct ChildDebuggerSettings
     bool skipInitialBreakpoint = true;
 
     std::vector<ProcessConfig> processConfigs;
-    bool attachOthers = true;
+    bool                       attachOthers = true;
 };
 
 class ATL_NO_VTABLE CChildDebuggerService :
     public CChildDebuggerServiceContract,
-	public CComObjectRootEx<CComMultiThreadModel>,
+    public CComObjectRootEx<CComMultiThreadModel>,
     public CComCoClass<CChildDebuggerService, &CChildDebuggerServiceContract::ClassId>
 {
 protected:
@@ -44,7 +44,7 @@ public:
 
 public:
     virtual HRESULT STDMETHODCALLTYPE SendLower(
-        Microsoft::VisualStudio::Debugger::DkmCustomMessage* pCustomMessage,
+        Microsoft::VisualStudio::Debugger::DkmCustomMessage*  pCustomMessage,
         Microsoft::VisualStudio::Debugger::DkmCustomMessage** ppReplyMessage) override;
 
     virtual HRESULT STDMETHODCALLTYPE OnModuleInstanceLoad(
@@ -55,7 +55,7 @@ public:
     virtual HRESULT STDMETHODCALLTYPE OnRuntimeBreakpoint(
         _In_ Microsoft::VisualStudio::Debugger::Breakpoints::DkmRuntimeBreakpoint* pRuntimeBreakpoint,
         _In_ Microsoft::VisualStudio::Debugger::DkmThread* pThread,
-        _In_ bool HasException,
+        _In_ bool                                          HasException,
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
 
     virtual HRESULT STDMETHODCALLTYPE OnEmbeddedBreakpointHitReceived(
@@ -65,8 +65,8 @@ public:
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
 
 private:
-    ChildDebuggerSettings settings;
-    std::ofstream logFile;
+    ChildDebuggerSettings                                                settings;
+    std::ofstream                                                        logFile;
     std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> createProcessFunctionNames;
 };
 

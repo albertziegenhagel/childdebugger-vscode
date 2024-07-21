@@ -1,9 +1,9 @@
-#include <string>
 #include <cassert>
-#include <thread>
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <thread>
 
 #include <iostream> // TODO: remove
 
@@ -11,8 +11,8 @@
 #include <atlcom.h>
 #include <atlctl.h>
 
-#include <tlhelp32.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 
 #include <vsdebugeng.h>
 #include <vsdebugeng.templates.h>
@@ -26,7 +26,9 @@ using namespace Microsoft::VisualStudio::Debugger;
 // Source ID for breakpoints that we create for child process debugging.
 // This allows this extension to only get notified on breakpoints that it created itself.
 // {0BB89D05-9EAD-4295-9A74-A241583DE420} (same as in vsdconfigxml filter)
-static const GUID sourceId = { 0x0bb89d05, 0x9ead, 0x4295, { 0x9a, 0x74, 0xa2, 0x41, 0x58, 0x3d, 0xe4, 0x20 } };
+static const GUID sourceId = {
+    0x0bb8'9d05, 0x9ead, 0x4295, {0x9a, 0x74, 0xa2, 0x41, 0x58, 0x3d, 0xe4, 0x20}
+};
 
 // Takes the Wide-Char (UTF-16) encoded input string and returns it as an UTF-8 encoded string.
 std::string utf8_encode(const std::wstring& input)
@@ -40,10 +42,10 @@ std::string utf8_encode(const std::wstring& input)
     assert(result_size > 0);
 
     std::string result(result_size, '\0');
-    const auto bytes_converted = WideCharToMultiByte(CP_UTF8, 0,
-                                                     input.data(), static_cast<int>(input.size()),
-                                                     result.data(), result_size,
-                                                     nullptr, nullptr);
+    const auto  bytes_converted = WideCharToMultiByte(CP_UTF8, 0,
+                                                      input.data(), static_cast<int>(input.size()),
+                                                      result.data(), result_size,
+                                                      nullptr, nullptr);
     assert(bytes_converted != 0);
 
     return result;
@@ -59,9 +61,9 @@ std::wstring utf16_encode(const std::string& input)
     assert(result_size > 0);
 
     std::wstring result(result_size, L'\0');
-    const auto bytes_converted = MultiByteToWideChar(CP_UTF8, 0,
-                                                     input.data(), static_cast<int>(input.size()),
-                                                     result.data(), result_size);
+    const auto   bytes_converted = MultiByteToWideChar(CP_UTF8, 0,
+                                                       input.data(), static_cast<int>(input.size()),
+                                                       result.data(), result_size);
     assert(bytes_converted != 0);
 
     return result;
@@ -73,7 +75,7 @@ std::optional<std::filesystem::path> get_current_module_path()
     HMODULE current_module = NULL;
     if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&get_current_module_path, &current_module) == FALSE) return std::nullopt;
 
-    WCHAR buffer[MAX_PATH]; // FIXME: handle paths longer than MAX_PATH
+    WCHAR      buffer[MAX_PATH]; // FIXME: handle paths longer than MAX_PATH
     const auto result_size = GetModuleFileNameW(current_module, buffer, MAX_PATH);
     if(result_size == 0) return std::nullopt;
 
@@ -94,11 +96,11 @@ bool contains_any(std::string_view input, const std::vector<std::string>& entrie
 }
 
 #ifdef CreateProcess
-#   undef CreateProcess
+#    undef CreateProcess
 #endif
 
 #ifdef CreateProcessAsUser
-#   undef CreateProcessAsUser
+#    undef CreateProcessAsUser
 #endif
 
 enum class CreateFunctionType
@@ -122,7 +124,7 @@ template<typename Interface>
 class BaseObject : public Interface
 {
     volatile LONG m_refCount;
-    
+
 public:
     virtual ULONG __stdcall AddRef() override
     {
@@ -131,7 +133,7 @@ public:
     virtual ULONG __stdcall Release() override
     {
         ULONG result = (ULONG)InterlockedDecrement(&m_refCount);
-        if (result == 0)
+        if(result == 0)
         {
             delete this;
         }
@@ -139,14 +141,14 @@ public:
     }
     virtual HRESULT __stdcall QueryInterface(REFIID riid, _Deref_out_ void** ppv) override
     {
-        if (riid == __uuidof(IUnknown))
+        if(riid == __uuidof(IUnknown))
         {
             *ppv = static_cast<IUnknown*>(this);
             AddRef();
             return S_OK;
         }
         // This example is implementing the optional interface IDkmDisposableDataItem
-        else if (riid == __uuidof(IDkmDisposableDataItem))
+        else if(riid == __uuidof(IDkmDisposableDataItem))
         {
             *ppv = static_cast<IDkmDisposableDataItem*>(this);
             AddRef();
@@ -165,14 +167,15 @@ public:
 class __declspec(uuid("{1483C347-BDAD-4626-B33F-D16970542239}")) CreateInInfo :
     public BaseObject<IDkmDisposableDataItem>
 {
-    BOOL isUnicode_;
+    BOOL               isUnicode_;
     CreateFunctionType functionType_;
+
 public:
     virtual HRESULT __stdcall OnClose() override
     {
         return S_OK;
     }
-    
+
     explicit CreateInInfo(BOOL isUnicode, CreateFunctionType functionType) :
         isUnicode_(isUnicode),
         functionType_(functionType)
@@ -182,7 +185,7 @@ public:
     {
         return isUnicode_;
     }
-    
+
     CreateFunctionType GetFunctionType() const
     {
         return functionType_;
@@ -195,7 +198,8 @@ class __declspec(uuid("{F1AB4299-C3EB-47C5-83B7-813E28B9DA89}")) CreateOutInfo :
     public BaseObject<IDkmDisposableDataItem>
 {
     UINT64 lpProcessInformation_;
-    bool suspended_;
+    bool   suspended_;
+
 public:
     virtual HRESULT __stdcall OnClose() override
     {
@@ -211,18 +215,18 @@ public:
     {
         return lpProcessInformation_;
     }
-    
+
     bool GetSuspended() const
     {
         return suspended_;
     }
 };
 
-
 class __declspec(uuid("{0709D0FC-76B1-44E8-B781-E8C43461CFAC}")) ChildProcessItem :
     public BaseObject<IDkmDisposableDataItem>
 {
     bool passedInitialBreakpoint_;
+
 public:
     virtual HRESULT __stdcall OnClose() override
     {
@@ -232,7 +236,7 @@ public:
     explicit ChildProcessItem() :
         passedInitialBreakpoint_(false)
     {}
-    
+
     bool GetPassedInitialBreakpoint() const
     {
         return passedInitialBreakpoint_;
@@ -293,7 +297,7 @@ struct CreateProcessAsUserStack
     UINT64 lpCurrentDirectory;
     UINT64 lpStartupInfo;
     UINT64 lpProcessInformation;
-    
+
     static DWORD64 getLpApplicationNameFromRegister(const CONTEXT& context)
     {
         return context.Rdx;
@@ -306,12 +310,10 @@ struct CreateProcessAsUserStack
 
 // TODO: add parameter stack definitions for `CreateProcessWithToken` and `CreateProcessWithLogon`.
 
-
-
 HRESULT readMemoryFromStringAt(
-    DkmProcess* process,
-    DWORD64 address,
-    bool isUnicode,
+    DkmProcess*         process,
+    DWORD64             address,
+    bool                isUnicode,
     CComPtr<DkmString>& result)
 {
     if(address == 0) return S_OK;
@@ -328,21 +330,22 @@ HRESULT readMemoryFromStringAt(
     }
     else
     {
-        return DkmString::Create(CP_ACP, reinterpret_cast<const char*>(bytes.Members),  bytes.Length, &result);
+        return DkmString::Create(CP_ACP, reinterpret_cast<const char*>(bytes.Members), bytes.Length, &result);
     }
 }
 
 bool checkAttachToProcess(
     const ChildDebuggerSettings& settings,
-    std::ofstream& logFile,
-    const CComPtr<DkmString>& applicationName,
-    const CComPtr<DkmString>& commandLine)
+    std::ofstream&               logFile,
+    const CComPtr<DkmString>&    applicationName,
+    const CComPtr<DkmString>&    commandLine)
 {
     if(!applicationName && !commandLine) return settings.attachOthers;
 
     for(const auto& config : settings.processConfigs)
     {
-        logFile << "  Check process config: " << "\n";
+        logFile << "  Check process config: "
+                << "\n";
         logFile << "    applicationName: " << (config.applicationName ? utf8_encode(*config.applicationName) : "<EMPTY>") << "\n";
         logFile << "    commandLine: " << (config.commandLine ? utf8_encode(*config.commandLine) : "<EMPTY>") << "\n";
 
@@ -388,10 +391,10 @@ bool checkAttachToProcess(
 template<typename StackType>
 HRESULT handleCallToCreateProcess(
     const ChildDebuggerSettings& settings,
-    std::ofstream& logFile,
-    DkmThread* pThread,
-    const CONTEXT& context,
-    bool isUnicode)
+    std::ofstream&               logFile,
+    DkmThread*                   pThread,
+    const CONTEXT&               context,
+    bool                         isUnicode)
 {
     // Extract the application name from the passed arguments.
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
@@ -449,7 +452,7 @@ HRESULT handleCallToCreateProcess(
     }
     else if(settings.suspendChildren)
     {
-        forcedSuspension = true;
+        forcedSuspension      = true;
         const UINT32 newFlags = stack.dwCreationFlags | CREATE_SUSPENDED;
 
         CAutoDkmArray<BYTE> newFlagsBytes;
@@ -518,7 +521,7 @@ std::optional<std::vector<std::string>> read_no_suspend(const std::filesystem::p
     if(!no_suspend_file.is_open()) return std::nullopt;
 
     std::vector<std::string> result;
-    std::string line;
+    std::string              line;
     while(std::getline(no_suspend_file, line))
     {
         if(line.empty()) continue;
@@ -530,7 +533,7 @@ std::optional<std::vector<std::string>> read_no_suspend(const std::filesystem::p
 
 CChildDebuggerService::CChildDebuggerService()
 {
-    const auto* const log_file_name    = "ChildDebugger.log";
+    const auto* const log_file_name = "ChildDebugger.log";
 
     const auto root = get_current_module_path();
 
@@ -560,8 +563,8 @@ std::optional<std::wstring> try_get_optional_string(const nlohmann::json& json, 
 }
 
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
-        DkmCustomMessage* pCustomMessage,
-        DkmCustomMessage** ppReplyMessage)
+    DkmCustomMessage*  pCustomMessage,
+    DkmCustomMessage** ppReplyMessage)
 {
     logFile << "On CustomMessage (Debugger PID " << GetCurrentProcessId() << ")\n";
     logFile << "  MessageCode " << pCustomMessage->MessageCode() << "\n";
@@ -569,152 +572,149 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
 
     switch(CustomMessageType(pCustomMessage->MessageCode()))
     {
-        case CustomMessageType::Settings:
+    case CustomMessageType::Settings:
+    {
+        if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_BSTR) return S_FALSE;
+
+        const auto settingsStr = pCustomMessage->Parameter1()->Value().bstrVal;
+
+        // TODO: if we can find a reasonably small JSON parser library that can handle UTF-16 encoded
+        // strings, we can probably get rid of this transcoding.
+        const auto utf8SettingsStr = utf8_encode(settingsStr);
+
+        try
         {
-            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_BSTR) return S_FALSE;
+            const auto settingsJson = nlohmann::json::parse(utf8SettingsStr);
 
-            const auto settingsStr = pCustomMessage->Parameter1()->Value().bstrVal;
+            settings.enabled               = try_get_or(settingsJson, "enabled", false);
+            settings.suspendParents        = try_get_or(settingsJson, "suspendParents", true);
+            settings.suspendChildren       = try_get_or(settingsJson, "suspendChildren", true);
+            settings.skipInitialBreakpoint = try_get_or(settingsJson, "skipInitialBreakpoint", true);
+            settings.attachOthers          = try_get_or(settingsJson, "attachOthers", true);
 
-            // TODO: if we can find a reasonably small JSON parser library that can handle UTF-16 encoded
-            // strings, we can probably get rid of this transcoding.
-            const auto utf8SettingsStr = utf8_encode(settingsStr);
-
-            try
+            settings.processConfigs.clear();
+            if(settingsJson.count("processConfigs") > 0)
             {
-                const auto settingsJson = nlohmann::json::parse(utf8SettingsStr);
-                
-                settings.enabled = try_get_or(settingsJson, "enabled", false);
-                settings.suspendParents = try_get_or(settingsJson, "suspendParents", true);
-                settings.suspendChildren = try_get_or(settingsJson, "suspendChildren", true);
-                settings.skipInitialBreakpoint = try_get_or(settingsJson, "skipInitialBreakpoint", true);
-                settings.attachOthers = try_get_or(settingsJson, "attachOthers", true);
-
-                settings.processConfigs.clear();
-                if(settingsJson.count("processConfigs") > 0)
+                for(const auto& configEntry : settingsJson.at("processConfigs"))
                 {
-                    for(const auto& configEntry : settingsJson.at("processConfigs"))
-                    {
-                        settings.processConfigs.push_back(
-                            ProcessConfig{
-                                .applicationName = try_get_optional_string(configEntry, "applicationName"),
-                                .commandLine = try_get_optional_string(configEntry, "commandLine"),
-                                .attach = try_get_or(configEntry, "attach", true)
-                            }
-                        );
-                    }
+                    settings.processConfigs.push_back(
+                        ProcessConfig{
+                            .applicationName = try_get_optional_string(configEntry, "applicationName"),
+                            .commandLine     = try_get_optional_string(configEntry, "commandLine"),
+                            .attach          = try_get_or(configEntry, "attach", true)});
                 }
             }
-            catch(const nlohmann::json::parse_error& ex)
-            {
-                logFile << "  Failed to parse JSON settings: " << ex.what() << "\n";
-                logFile.flush();
-            }
-            logFile << "  enabled:               " << settings.enabled << "\n";
-            logFile << "  suspendParents:        " << settings.suspendParents << "\n";
-            logFile << "  suspendChildren:       " << settings.suspendChildren << "\n";
-            logFile << "  skipInitialBreakpoint: " << settings.skipInitialBreakpoint << "\n";
-            logFile << "  attachOthers:          " << settings.attachOthers << "\n";
-            logFile << "  processConfigs:\n";
-            for(const auto& config : settings.processConfigs)
-            {
-                logFile << "    applicationName:        " << (config.applicationName ? utf8_encode(*config.applicationName) : "<EMPTY>") << "\n";
-                logFile << "    commandLine:            " << (config.commandLine ? utf8_encode(*config.commandLine) : "<EMPTY>") << "\n";
-                logFile << "    attach:                 " << config.attach << "\n";
-            }
+        }
+        catch(const nlohmann::json::parse_error& ex)
+        {
+            logFile << "  Failed to parse JSON settings: " << ex.what() << "\n";
             logFile.flush();
         }
-        break;
-        case CustomMessageType::ResumeChild:
-        case CustomMessageType::InformChild:
+        logFile << "  enabled:               " << settings.enabled << "\n";
+        logFile << "  suspendParents:        " << settings.suspendParents << "\n";
+        logFile << "  suspendChildren:       " << settings.suspendChildren << "\n";
+        logFile << "  skipInitialBreakpoint: " << settings.skipInitialBreakpoint << "\n";
+        logFile << "  attachOthers:          " << settings.attachOthers << "\n";
+        logFile << "  processConfigs:\n";
+        for(const auto& config : settings.processConfigs)
         {
-            if(!settings.enabled) return S_OK;
-
-            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
-            if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
-
-            const auto processId = pCustomMessage->Parameter1()->Value().lVal;
-            const auto threadId = pCustomMessage->Parameter2()->Value().lVal;
-            logFile << "  child PID " << processId << "\n";
-            logFile << "  child TID " << threadId << "\n";
-
-            CComPtr<DkmProcess> process;
-            if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
-            {
-                logFile << "  Failed to find process\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-
-            CComPtr<ChildProcessItem> childInfo;
-            childInfo.Attach(new ChildProcessItem());
-
-            process->SetDataItem(DkmDataCreationDisposition::CreateNew, childInfo);
-
-            if(CustomMessageType(pCustomMessage->MessageCode()) == CustomMessageType::ResumeChild)
-            {
-                const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, threadId);
-                if(hThread == nullptr)
-                {
-                    logFile << "  Failed to open thread\n";
-                    logFile.flush();
-                    return S_FALSE;
-                }
-
-                // Resume the thread.
-                logFile << "  CALL ResumeThread\n";
-                logFile.flush();
-                const auto suspendCount = ResumeThread(hThread);
-                logFile << "  RESULT " << suspendCount << "\n";
-                logFile.flush();
-                CloseHandle(hThread);
-            }
+            logFile << "    applicationName:        " << (config.applicationName ? utf8_encode(*config.applicationName) : "<EMPTY>") << "\n";
+            logFile << "    commandLine:            " << (config.commandLine ? utf8_encode(*config.commandLine) : "<EMPTY>") << "\n";
+            logFile << "    attach:                 " << config.attach << "\n";
         }
-        break;
-        case CustomMessageType::ResumeParent:
+        logFile.flush();
+    }
+    break;
+    case CustomMessageType::ResumeChild:
+    case CustomMessageType::InformChild:
+    {
+        if(!settings.enabled) return S_OK;
+
+        if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
+        if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
+
+        const auto processId = pCustomMessage->Parameter1()->Value().lVal;
+        const auto threadId  = pCustomMessage->Parameter2()->Value().lVal;
+        logFile << "  child PID " << processId << "\n";
+        logFile << "  child TID " << threadId << "\n";
+
+        CComPtr<DkmProcess> process;
+        if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
         {
-            if(!settings.enabled) return S_OK;
-
-            if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
-            if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
-
-            const auto processId = pCustomMessage->Parameter1()->Value().lVal;
-            const auto threadId = pCustomMessage->Parameter2()->Value().lVal;
-            logFile << "  parent PID " << processId << "\n";
-            logFile << "  parent TID " << threadId << "\n";
-
-            CComPtr<DkmProcess> process;
-            if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
-            {
-                logFile << "  Failed to find process\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-
-            CComPtr<DkmThread> thread;
-            if(process->FindSystemThread(threadId, &thread) != S_OK)
-            {
-                logFile << "  Failed to find thread\n";
-                logFile.flush();
-                return S_FALSE;
-            }
-
-            UINT32 external_suspension_count;
-            if(thread->Resume(true, &external_suspension_count) != S_OK)
-            {
-                logFile << "  Failed to resume thread\n";
-                logFile.flush();
-                return S_FALSE;
-            }
+            logFile << "  Failed to find process\n";
+            logFile.flush();
+            return S_FALSE;
         }
-        break;
+
+        CComPtr<ChildProcessItem> childInfo;
+        childInfo.Attach(new ChildProcessItem());
+
+        process->SetDataItem(DkmDataCreationDisposition::CreateNew, childInfo);
+
+        if(CustomMessageType(pCustomMessage->MessageCode()) == CustomMessageType::ResumeChild)
+        {
+            const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, threadId);
+            if(hThread == nullptr)
+            {
+                logFile << "  Failed to open thread\n";
+                logFile.flush();
+                return S_FALSE;
+            }
+
+            // Resume the thread.
+            logFile << "  CALL ResumeThread\n";
+            logFile.flush();
+            const auto suspendCount = ResumeThread(hThread);
+            logFile << "  RESULT " << suspendCount << "\n";
+            logFile.flush();
+            CloseHandle(hThread);
+        }
+    }
+    break;
+    case CustomMessageType::ResumeParent:
+    {
+        if(!settings.enabled) return S_OK;
+
+        if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_I4) return S_FALSE;
+        if(pCustomMessage->Parameter2() == nullptr || pCustomMessage->Parameter2()->Type() != VT_I4) return S_FALSE;
+
+        const auto processId = pCustomMessage->Parameter1()->Value().lVal;
+        const auto threadId  = pCustomMessage->Parameter2()->Value().lVal;
+        logFile << "  parent PID " << processId << "\n";
+        logFile << "  parent TID " << threadId << "\n";
+
+        CComPtr<DkmProcess> process;
+        if(pCustomMessage->Connection()->FindLiveProcess(processId, &process) != S_OK)
+        {
+            logFile << "  Failed to find process\n";
+            logFile.flush();
+            return S_FALSE;
+        }
+
+        CComPtr<DkmThread> thread;
+        if(process->FindSystemThread(threadId, &thread) != S_OK)
+        {
+            logFile << "  Failed to find thread\n";
+            logFile.flush();
+            return S_FALSE;
+        }
+
+        UINT32 external_suspension_count;
+        if(thread->Resume(true, &external_suspension_count) != S_OK)
+        {
+            logFile << "  Failed to resume thread\n";
+            logFile.flush();
+            return S_FALSE;
+        }
+    }
+    break;
     }
     return S_OK;
 }
 
-
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
-    DkmModuleInstance* pModuleInstance,
-    DkmWorkList* pWorkList,
+    DkmModuleInstance*   pModuleInstance,
+    DkmWorkList*         pWorkList,
     DkmEventDescriptorS* pEventDescriptor)
 {
     if(!settings.enabled) return S_OK;
@@ -755,7 +755,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         logFile.flush();
 
         // TODO: Simplify this:
-        const auto functionType = [&functionName]() -> CreateFunctionType {
+        const auto functionType = [&functionName]() -> CreateFunctionType
+        {
             if(std::wstring_view(functionName->Value(), functionName->Length()).starts_with(L"CreateProcessWithLogon"))
             {
                 return CreateFunctionType::CreateProcessWithLogon;
@@ -795,9 +796,9 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
 
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     Breakpoints::DkmRuntimeBreakpoint* pRuntimeBreakpoint,
-    DkmThread* pThread,
-    bool HasException,
-    DkmEventDescriptorS* pEventDescriptor)
+    DkmThread*                         pThread,
+    bool                               HasException,
+    DkmEventDescriptorS*               pEventDescriptor)
 {
     if(!settings.enabled) return S_OK;
 
@@ -856,7 +857,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         //  - extract the process ID if of the created child process.
         //  - inform the debug client (VS Code) about the newly created process, so that it can attach to it.
 
-        logFile << "  In PID " << pThread->Process()->LivePart()->Id << ": Finish CreateProcess" << "\n";
+        logFile << "  In PID " << pThread->Process()->LivePart()->Id << ": Finish CreateProcess"
+                << "\n";
         logFile.flush();
 
         pRuntimeBreakpoint->Close(); // Remove this breakpoint. We will create a new one for the next call.
@@ -891,10 +893,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
 
         // Try to extract the application name of the created child process.
         std::wstring applicationName;
-        const auto processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, procInfo.dwProcessId);
+        const auto   processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, procInfo.dwProcessId);
         if(processHandle)
         {
-            WCHAR buffer[MAX_PATH];
+            WCHAR      buffer[MAX_PATH];
             const auto size = GetProcessImageFileNameW(processHandle, buffer, MAX_PATH);
             if(size > 0)
             {
@@ -921,7 +923,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
                 return S_FALSE;
             }
         }
-        
+
         // Now comes the real HACK:
         // We need to inform the client (VS Code) about the new child process, so that it can attach to it.
         // Unfortunately `DkmDebugProcessRequest` does not seem to be implemented by the debug adapter used
@@ -935,12 +937,14 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         // back in the VS Code extension side.
         CComPtr<DkmString> messageStr;
         if(DkmString::Create((L"ChildDebugger: attach to child NAME '" + applicationName +
-                                L"' PPID " + std::to_wstring(pThread->Process()->LivePart()->Id) +
-                                L" PTID " + std::to_wstring(pThread->SystemPart()->Id) +
-                                L" CPID " + std::to_wstring(procInfo.dwProcessId) +
-                                L" CTID " + std::to_wstring(procInfo.dwThreadId) + 
-                                (outInfo->GetSuspended() ? L" CSUSPENDED" : L"") +
-                                (settings.suspendParents ? L" PSUSPENDED" : L"") + L"\n").c_str(), &messageStr) != S_OK)
+                              L"' PPID " + std::to_wstring(pThread->Process()->LivePart()->Id) +
+                              L" PTID " + std::to_wstring(pThread->SystemPart()->Id) +
+                              L" CPID " + std::to_wstring(procInfo.dwProcessId) +
+                              L" CTID " + std::to_wstring(procInfo.dwThreadId) +
+                              (outInfo->GetSuspended() ? L" CSUSPENDED" : L"") +
+                              (settings.suspendParents ? L" PSUSPENDED" : L"") + L"\n")
+                                 .c_str(),
+                             &messageStr) != S_OK)
         {
             logFile << "  FAILED to create string for message!\n";
             logFile.flush();
@@ -980,7 +984,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
     logFile << "On OnEmbeddedBreakpointHitReceived (Debugger PID " << GetCurrentProcessId() << ")\n";
 
     // The initial breakpoint is in ntdll.dll!LdrpDoDebuggerBreak()
-    if(DkmString::CompareOrdinalIgnoreCase(pInstructionAddress->ModuleInstance()->Name(), L"ntdll.dll") != 0)  return S_OK;
+    if(DkmString::CompareOrdinalIgnoreCase(pInstructionAddress->ModuleInstance()->Name(), L"ntdll.dll") != 0) return S_OK;
 
     logFile << "  IN NTDLL\n";
     logFile.flush();
@@ -998,10 +1002,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
 
     CComPtr<ChildProcessItem> childInfo;
     pThread->Process()->GetDataItem(&childInfo);
-    if(!childInfo)  return S_OK;
-    
+    if(!childInfo) return S_OK;
+
     logFile << "  Has child info\n";
-    logFile << "    Passed Initial Breakpoint " <<  childInfo->GetPassedInitialBreakpoint() <<"\n";
+    logFile << "    Passed Initial Breakpoint " << childInfo->GetPassedInitialBreakpoint() << "\n";
     logFile.flush();
 
     // Skip if we passed the initial breakpoint already

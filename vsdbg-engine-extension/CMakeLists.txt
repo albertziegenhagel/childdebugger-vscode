@@ -19,7 +19,7 @@ target_compile_features(ChildDebugger
 target_compile_definitions(ChildDebugger
   PRIVATE
     "_USRDLL"
-    # "_AMD64_"
+    "VSDEBUGENG_USE_CPP11_SCOPED_ENUMS"
 )
 
 target_sources(ChildDebugger

@@ -1,19 +1,19 @@
 
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <thread>
-#include <chrono>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-struct options
+struct Options
 {
-    std::filesystem::path child_path;
+    std::filesystem::path     child_path;
     std::vector<std::wstring> child_args;
 
-    bool suspend = false;
-    bool wait = false;
+    bool suspend     = false;
+    bool wait        = false;
     bool no_app_name = false;
 
     std::chrono::seconds init_sleep_time    = std::chrono::seconds(1);
@@ -52,10 +52,10 @@ void print_usage()
     print_usage_and_exit(EXIT_FAILURE);
 }
 
-options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
+Options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
 {
-    options result;
-    bool    help = false;
+    Options                              result;
+    bool                                 help = false;
     std::optional<std::filesystem::path> child_path;
     for(int arg_i = 1; arg_i < argc; ++arg_i)
     {
@@ -86,11 +86,11 @@ options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
             result.child_args.reserve(argc - arg_next);
             for(int arg_j = arg_next; arg_j < argc; ++arg_j)
             {
-                result.child_args.push_back(argv[arg_j]);
+                result.child_args.emplace_back(argv[arg_j]);
             }
             break;
         }
-        else if(child_path != std::nullopt)
+        else if(child_path.has_value())
         {
             print_error_and_exit(std::format(L"Multiple paths not supported: first was '{}' current is '{}'", child_path->c_str(), current_arg));
         }
@@ -147,7 +147,7 @@ void append_quoted_command_line_argument(std::wstring& command_line, std::wstrin
             command_line.append(num_backslashes * 2, L'\\');
             break;
         }
-        else if(*it == L'"')
+        if(*it == L'"')
         {
             command_line.append(num_backslashes * 2 + 1, L'\\');
             command_line.push_back(*it);
@@ -162,7 +162,7 @@ void append_quoted_command_line_argument(std::wstring& command_line, std::wstrin
     command_line.push_back(L'"');
 }
 
-std::optional<std::wstring> make_command_line(const options& opts)
+std::optional<std::wstring> make_command_line(const Options& opts)
 {
     if(opts.child_args.empty() && !opts.no_app_name) return std::nullopt;
 
@@ -178,6 +178,7 @@ std::optional<std::wstring> make_command_line(const options& opts)
     return command_line;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays)
 int wmain(int argc, wchar_t* argv[])
 {
     const auto opts = parse_command_line(argc, argv);
@@ -188,8 +189,8 @@ int wmain(int argc, wchar_t* argv[])
 
     auto command_line = make_command_line(opts);
 
-    const DWORD creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
-    STARTUPINFOW info={sizeof(info)};
+    const DWORD         creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
+    STARTUPINFOW        info           = {sizeof(info)};
     PROCESS_INFORMATION process_info;
 
     const auto result = CreateProcessW(
@@ -214,8 +215,8 @@ int wmain(int argc, wchar_t* argv[])
 
     if(opts.suspend)
     {
-        const auto childMainThread = OpenThread(THREAD_SUSPEND_RESUME, false, process_info.dwThreadId);
-        if(childMainThread == nullptr)
+        auto* const child_main_thread = OpenThread(THREAD_SUSPEND_RESUME, 0, process_info.dwThreadId);
+        if(child_main_thread == nullptr)
         {
             std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to open child process thread: " << result << std::endl;
             return EXIT_FAILURE;
@@ -223,9 +224,9 @@ int wmain(int argc, wchar_t* argv[])
 
         std::this_thread::sleep_for(opts.suspend_sleep_time);
 
-        ResumeThread(childMainThread);
+        ResumeThread(child_main_thread);
         std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): resumed child" << std::endl;
-        CloseHandle(childMainThread);
+        CloseHandle(child_main_thread);
     }
 
     std::this_thread::sleep_for(opts.final_sleep_time);

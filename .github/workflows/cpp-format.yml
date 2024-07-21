@@ -1,0 +1,22 @@
+name: C++ format
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  
+jobs:
+  job:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run clang-format
+      uses: DoozyX/clang-format-lint-action@v0.17
+      with:
+        source: './vsdbg-engine-extension/src ./vsdbg-engine-extension/tests'
+        exclude: './vsdbg-engine-extension/src/nlohmann'
+        extensions: 'cpp,h'
+        clangFormatVersion: 17

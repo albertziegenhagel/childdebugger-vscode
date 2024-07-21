@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { installVsDbgEngineExtensionIntegration } from './integration';
+import { installVsDbgEngineExtensionIntegration, uninstallVsDbgEngineExtensionIntegration } from './integration';
 
 const outputChannelName = "Child Debugger";
 
@@ -41,15 +41,13 @@ const childDebuggerSourceId = "{0BB89D05-9EAD-4295-9A74-A241583DE420}";
 
 export function activate(context: vscode.ExtensionContext) {
 
-	if(context.extensionMode === vscode.ExtensionMode.Production) {
-		installVsDbgEngineExtensionIntegration(context.extensionPath).catch().then((value) => {
-			outputChannel.appendLine("Successfully installed VS Debug Engine integration.");
-		}, (reason) => {
-			vscode.window.showErrorMessage(`Failed to install VS Debug Engine integration.\nSee "${outputChannelName}" output channel for more information.`);
-			outputChannel.appendLine("Failed to install VS Debug Engine integration:");
-			outputChannel.appendLine(`  ${reason}`);
-		});
-	}
+	installVsDbgEngineExtensionIntegration(context.extensionPath).catch().then((value) => {
+		outputChannel.appendLine("Successfully installed VS Debug Engine integration.");
+	}, (reason) => {
+		vscode.window.showErrorMessage(`Failed to install VS Debug Engine integration.\nSee "${outputChannelName}" output channel for more information.`);
+		outputChannel.appendLine("Failed to install VS Debug Engine integration:");
+		outputChannel.appendLine(`  ${reason}`);
+	});
 
 	vscode.debug.registerDebugAdapterTrackerFactory('*', {
 		createDebugAdapterTracker(session: vscode.DebugSession) {
@@ -237,4 +235,6 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 }
 
-export function deactivate() { }
+export function deactivate() {
+	// uninstallVsDbgEngineExtensionIntegration();
+}

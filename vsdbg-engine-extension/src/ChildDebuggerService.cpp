@@ -72,27 +72,19 @@ std::wstring utf16_encode(const std::string& input)
 // Retrieve the path to the module (DLL) that holds this function.
 std::optional<std::filesystem::path> get_current_module_path()
 {
-    HMODULE current_module = NULL;
-    if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)&get_current_module_path, &current_module) == FALSE) return std::nullopt;
+    HMODULE    current_module        = nullptr;
+    const auto *const moduleFunctionAddress = (LPCWSTR)(&get_current_module_path); // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+    if(GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, moduleFunctionAddress, &current_module) == FALSE) return std::nullopt;
 
-    WCHAR      buffer[MAX_PATH]; // FIXME: handle paths longer than MAX_PATH
-    const auto result_size = GetModuleFileNameW(current_module, buffer, MAX_PATH);
+    std::array<WCHAR, MAX_PATH> buffer; // FIXME: handle paths longer than MAX_PATH
+
+    const auto result_size = GetModuleFileNameW(current_module, buffer.data(), buffer.size());
     if(result_size == 0) return std::nullopt;
 
-    const auto result = std::filesystem::path(buffer).parent_path();
+    auto result = std::filesystem::path(buffer.data()).parent_path();
     if(result.empty()) return std::nullopt;
 
     return result;
-}
-
-// Returns true if the input string contains any of the strings in the `entries` argument.
-bool contains_any(std::string_view input, const std::vector<std::string>& entries)
-{
-    for(const auto& entry : entries)
-    {
-        if(input.contains(entry)) return true;
-    }
-    return false;
 }
 
 #ifdef CreateProcess
@@ -126,20 +118,29 @@ class BaseObject : public Interface
     volatile LONG m_refCount;
 
 public:
-    virtual ULONG __stdcall AddRef() override
+    virtual ~BaseObject() = default;
+
+    BaseObject() = default;
+
+    BaseObject(BaseObject&)             = delete;
+    BaseObject(BaseObject&&)            = delete;
+    BaseObject& operator=(BaseObject&)  = delete;
+    BaseObject& operator=(BaseObject&&) = delete;
+
+    ULONG __stdcall AddRef() override
     {
         return (ULONG)InterlockedIncrement(&m_refCount);
     }
-    virtual ULONG __stdcall Release() override
+    ULONG __stdcall Release() override
     {
-        ULONG result = (ULONG)InterlockedDecrement(&m_refCount);
+        auto result = (ULONG)InterlockedDecrement(&m_refCount);
         if(result == 0)
         {
             delete this;
         }
         return result;
     }
-    virtual HRESULT __stdcall QueryInterface(REFIID riid, _Deref_out_ void** ppv) override
+    HRESULT __stdcall QueryInterface(REFIID riid, _Deref_out_ void** ppv) override
     {
         if(riid == __uuidof(IUnknown))
         {
@@ -148,17 +149,15 @@ public:
             return S_OK;
         }
         // This example is implementing the optional interface IDkmDisposableDataItem
-        else if(riid == __uuidof(IDkmDisposableDataItem))
+        if(riid == __uuidof(IDkmDisposableDataItem))
         {
             *ppv = static_cast<IDkmDisposableDataItem*>(this);
             AddRef();
             return S_OK;
         }
-        else
-        {
-            *ppv = NULL;
-            return E_NOINTERFACE;
-        }
+
+        *ppv = nullptr;
+        return E_NOINTERFACE;
     }
 };
 
@@ -167,26 +166,33 @@ public:
 class __declspec(uuid("{1483C347-BDAD-4626-B33F-D16970542239}")) CreateInInfo :
     public BaseObject<IDkmDisposableDataItem>
 {
-    BOOL               isUnicode_;
+    bool               isUnicode_;
     CreateFunctionType functionType_;
 
 public:
-    virtual HRESULT __stdcall OnClose() override
-    {
-        return S_OK;
-    }
-
-    explicit CreateInInfo(BOOL isUnicode, CreateFunctionType functionType) :
+    explicit CreateInInfo(bool isUnicode, CreateFunctionType functionType) :
         isUnicode_(isUnicode),
         functionType_(functionType)
     {}
 
-    UINT64 GetIsUnicode() const
+    CreateInInfo(CreateInInfo&)             = delete;
+    CreateInInfo(CreateInInfo&&)            = delete;
+    CreateInInfo& operator=(CreateInInfo&)  = delete;
+    CreateInInfo& operator=(CreateInInfo&&) = delete;
+
+    ~CreateInInfo() override = default;
+
+    HRESULT __stdcall OnClose() override
+    {
+        return S_OK;
+    }
+
+    [[nodiscard]] bool GetIsUnicode() const
     {
         return isUnicode_;
     }
 
-    CreateFunctionType GetFunctionType() const
+    [[nodiscard]] CreateFunctionType GetFunctionType() const
     {
         return functionType_;
     }
@@ -201,22 +207,29 @@ class __declspec(uuid("{F1AB4299-C3EB-47C5-83B7-813E28B9DA89}")) CreateOutInfo :
     bool   suspended_;
 
 public:
-    virtual HRESULT __stdcall OnClose() override
-    {
-        return S_OK;
-    }
-
     explicit CreateOutInfo(UINT64 lpProcessInformation, bool suspended) :
         lpProcessInformation_(lpProcessInformation),
         suspended_(suspended)
     {}
 
-    UINT64 GetProcessInformationAddress() const
+    CreateOutInfo(CreateOutInfo&)             = delete;
+    CreateOutInfo(CreateOutInfo&&)            = delete;
+    CreateOutInfo& operator=(CreateOutInfo&)  = delete;
+    CreateOutInfo& operator=(CreateOutInfo&&) = delete;
+
+    ~CreateOutInfo() override = default;
+
+    HRESULT __stdcall OnClose() override
+    {
+        return S_OK;
+    }
+
+    [[nodiscard]] UINT64 GetProcessInformationAddress() const
     {
         return lpProcessInformation_;
     }
 
-    bool GetSuspended() const
+    [[nodiscard]] bool GetSuspended() const
     {
         return suspended_;
     }
@@ -225,19 +238,24 @@ public:
 class __declspec(uuid("{0709D0FC-76B1-44E8-B781-E8C43461CFAC}")) ChildProcessItem :
     public BaseObject<IDkmDisposableDataItem>
 {
-    bool passedInitialBreakpoint_;
+    bool passedInitialBreakpoint_{false};
 
 public:
-    virtual HRESULT __stdcall OnClose() override
+    explicit ChildProcessItem() = default;
+
+    ChildProcessItem(ChildProcessItem&)             = delete;
+    ChildProcessItem(ChildProcessItem&&)            = delete;
+    ChildProcessItem& operator=(ChildProcessItem&)  = delete;
+    ChildProcessItem& operator=(ChildProcessItem&&) = delete;
+
+    ~ChildProcessItem() override = default;
+
+    HRESULT __stdcall OnClose() override
     {
         return S_OK;
     }
 
-    explicit ChildProcessItem() :
-        passedInitialBreakpoint_(false)
-    {}
-
-    bool GetPassedInitialBreakpoint() const
+    [[nodiscard]] bool GetPassedInitialBreakpoint() const
     {
         return passedInitialBreakpoint_;
     }
@@ -328,10 +346,8 @@ HRESULT readMemoryFromStringAt(
     {
         return DkmString::Create(reinterpret_cast<const wchar_t*>(bytes.Members), &result);
     }
-    else
-    {
-        return DkmString::Create(CP_ACP, reinterpret_cast<const char*>(bytes.Members), bytes.Length, &result);
-    }
+
+    return DkmString::Create(CP_ACP, reinterpret_cast<const char*>(bytes.Members), bytes.Length, &result);
 }
 
 bool checkAttachToProcess(
@@ -563,8 +579,8 @@ std::optional<std::wstring> try_get_optional_string(const nlohmann::json& json, 
 }
 
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
-    DkmCustomMessage*  pCustomMessage,
-    DkmCustomMessage** ppReplyMessage)
+    DkmCustomMessage* pCustomMessage,
+    DkmCustomMessage** /*ppReplyMessage*/)
 {
     logFile << "On CustomMessage (Debugger PID " << GetCurrentProcessId() << ")\n";
     logFile << "  MessageCode " << pCustomMessage->MessageCode() << "\n";
@@ -576,7 +592,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
     {
         if(pCustomMessage->Parameter1() == nullptr || pCustomMessage->Parameter1()->Type() != VT_BSTR) return S_FALSE;
 
-        const auto settingsStr = pCustomMessage->Parameter1()->Value().bstrVal;
+        auto* const settingsStr = pCustomMessage->Parameter1()->Value().bstrVal;
 
         // TODO: if we can find a reasonably small JSON parser library that can handle UTF-16 encoded
         // strings, we can probably get rid of this transcoding.
@@ -653,7 +669,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
 
         if(CustomMessageType(pCustomMessage->MessageCode()) == CustomMessageType::ResumeChild)
         {
-            const auto hThread = OpenThread(THREAD_SUSPEND_RESUME, false, threadId);
+            auto* const hThread = OpenThread(THREAD_SUSPEND_RESUME, 0, threadId);
             if(hThread == nullptr)
             {
                 logFile << "  Failed to open thread\n";
@@ -713,9 +729,9 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
 }
 
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
-    DkmModuleInstance*   pModuleInstance,
-    DkmWorkList*         pWorkList,
-    DkmEventDescriptorS* pEventDescriptor)
+    DkmModuleInstance* pModuleInstance,
+    DkmWorkList* /*pWorkList*/,
+    DkmEventDescriptorS* /*pEventDescriptor*/)
 {
     if(!settings.enabled) return S_OK;
 
@@ -797,20 +813,20 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     Breakpoints::DkmRuntimeBreakpoint* pRuntimeBreakpoint,
     DkmThread*                         pThread,
-    bool                               HasException,
-    DkmEventDescriptorS*               pEventDescriptor)
+    bool /*HasException*/,
+    DkmEventDescriptorS* /*pEventDescriptor*/)
 {
     if(!settings.enabled) return S_OK;
 
     logFile << "OnRuntimeBreakpoint (Debugger PID " << GetCurrentProcessId() << ")\n";
-    wchar_t szGUID[64] = {0};
-    StringFromGUID2(pRuntimeBreakpoint->SourceId(), szGUID, 64);
-    logFile << "  Source ID:" << utf8_encode(szGUID) << "\n";
+    std::array<wchar_t, 64> guidStr = {L'\0'};
+    StringFromGUID2(pRuntimeBreakpoint->SourceId(), guidStr.data(), guidStr.size());
+    logFile << "  Source ID:" << utf8_encode(guidStr.data()) << "\n";
     logFile.flush();
 
     CComPtr<CreateInInfo> inInfo;
     pRuntimeBreakpoint->GetDataItem(&inInfo);
-    if(inInfo)
+    if(inInfo != nullptr)
     {
         // This is a breakpoint when entering a process creation function.
         // We will do the following things:
@@ -823,8 +839,9 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         logFile.flush();
 
         // Retrieve the current register values, required to extract function call arguments.
-        CONTEXT context;
-        if(pThread->GetContext(CONTEXT_CONTROL | CONTEXT_INTEGER, &context, sizeof(CONTEXT)) != S_OK)
+        CONTEXT      context;
+        const UINT32 contextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
+        if(pThread->GetContext(contextFlags, &context, sizeof(CONTEXT)) != S_OK)
         {
             logFile << "  FAILED to retrieve thread context.\n";
             logFile.flush();
@@ -834,23 +851,21 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         // FIXME: support remaining creation functions `CreateProcessWithToken` and `CreateProcessWithLogon`.
         if(inInfo->GetFunctionType() == CreateFunctionType::CreateProcess)
         {
-            return handleCallToCreateProcess<CreateProcessStack>(settings, logFile, pThread, context, inInfo->GetIsUnicode());
+            return handleCallToCreateProcess<CreateProcessStack>(settings, logFile, pThread, context, static_cast<unsigned int>(inInfo->GetIsUnicode()) != 0U);
         }
-        else if(inInfo->GetFunctionType() == CreateFunctionType::CreateProcessAsUser)
+        if(inInfo->GetFunctionType() == CreateFunctionType::CreateProcessAsUser)
         {
             return handleCallToCreateProcess<CreateProcessAsUserStack>(settings, logFile, pThread, context, inInfo->GetIsUnicode());
         }
-        else
-        {
-            logFile << "  Unsupported create function type: " << ((int)inInfo->GetFunctionType()) << ".\n";
-            logFile.flush();
-            return S_FALSE;
-        }
+
+        logFile << "  Unsupported create function type: " << ((int)inInfo->GetFunctionType()) << ".\n";
+        logFile.flush();
+        return S_FALSE;
     }
 
     CComPtr<CreateOutInfo> outInfo;
     pRuntimeBreakpoint->GetDataItem(&outInfo);
-    if(outInfo)
+    if(outInfo != nullptr)
     {
         // This is a breakpoint when a process creation has been completed.
         // We will do the following things:
@@ -864,8 +879,9 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         pRuntimeBreakpoint->Close(); // Remove this breakpoint. We will create a new one for the next call.
 
         // Retrieve the current register values, required to extract the function return value.
-        CONTEXT context;
-        if(pThread->GetContext(CONTEXT_CONTROL | CONTEXT_INTEGER, &context, sizeof(CONTEXT)) != S_OK)
+        CONTEXT      context;
+        const UINT32 contextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
+        if(pThread->GetContext(contextFlags, &context, sizeof(CONTEXT)) != S_OK)
         {
             logFile << "  FAILED to retrieve thread context.\n";
             logFile.flush();
@@ -893,14 +909,15 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
 
         // Try to extract the application name of the created child process.
         std::wstring applicationName;
-        const auto   processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, procInfo.dwProcessId);
-        if(processHandle)
+        auto* const  processHandle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, procInfo.dwProcessId);
+        if(processHandle != nullptr)
         {
-            WCHAR      buffer[MAX_PATH];
-            const auto size = GetProcessImageFileNameW(processHandle, buffer, MAX_PATH);
+            std::array<WCHAR, MAX_PATH> buffer; // FIXME: handle paths longer than MAX_PATH
+
+            const auto size = GetProcessImageFileNameW(processHandle, buffer.data(), buffer.size());
             if(size > 0)
             {
-                applicationName = std::filesystem::path(buffer).filename().native();
+                applicationName = std::filesystem::path(buffer.data()).filename().native();
             }
             CloseHandle(processHandle);
         }
@@ -916,7 +933,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         if(settings.suspendParents)
         {
             UINT32 external_suspension_count;
-            if(pThread->Suspend(true, &external_suspension_count))
+            if(pThread->Suspend(true, &external_suspension_count) != 0)
             {
                 logFile << "  FAILED to suspend parent process.\n";
                 logFile.flush();
@@ -975,8 +992,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
 HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived(
     _In_ DkmThread*                 pThread,
     _In_opt_ DkmInstructionAddress* pInstructionAddress,
-    _In_ bool                       ShowAsException,
-    _In_ DkmEventDescriptorS*       pEventDescriptor)
+    _In_ bool /*ShowAsException*/,
+    _In_ DkmEventDescriptorS* pEventDescriptor)
 {
     if(!settings.enabled) return S_OK;
     if(!settings.skipInitialBreakpoint) return S_OK;

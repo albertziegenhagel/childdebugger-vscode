@@ -42,27 +42,32 @@ public:
     DECLARE_NO_REGISTRY();
     DECLARE_NOT_AGGREGATABLE(CChildDebuggerService);
 
+    CChildDebuggerService(CChildDebuggerService&)             = delete;
+    CChildDebuggerService(CChildDebuggerService&&)            = delete;
+    CChildDebuggerService& operator=(CChildDebuggerService&)  = delete;
+    CChildDebuggerService& operator=(CChildDebuggerService&&) = delete;
+
 public:
     virtual HRESULT STDMETHODCALLTYPE SendLower(
-        Microsoft::VisualStudio::Debugger::DkmCustomMessage*  pCustomMessage,
+        Microsoft::VisualStudio::Debugger::DkmCustomMessage*  custom_message,
         Microsoft::VisualStudio::Debugger::DkmCustomMessage** ppReplyMessage) override;
 
     virtual HRESULT STDMETHODCALLTYPE OnModuleInstanceLoad(
-        _In_ Microsoft::VisualStudio::Debugger::DkmModuleInstance* pModuleInstance,
+        _In_ Microsoft::VisualStudio::Debugger::DkmModuleInstance* module_instance,
         _In_ Microsoft::VisualStudio::Debugger::DkmWorkList* pWorkList,
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
 
     virtual HRESULT STDMETHODCALLTYPE OnRuntimeBreakpoint(
-        _In_ Microsoft::VisualStudio::Debugger::Breakpoints::DkmRuntimeBreakpoint* pRuntimeBreakpoint,
+        _In_ Microsoft::VisualStudio::Debugger::Breakpoints::DkmRuntimeBreakpoint* runtime_breakpoint,
         _In_ Microsoft::VisualStudio::Debugger::DkmThread* pThread,
         _In_ bool                                          HasException,
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
 
     virtual HRESULT STDMETHODCALLTYPE OnEmbeddedBreakpointHitReceived(
         _In_ Microsoft::VisualStudio::Debugger::DkmThread* pThread,
-        _In_opt_ Microsoft::VisualStudio::Debugger::DkmInstructionAddress* pInstructionAddress,
+        _In_opt_ Microsoft::VisualStudio::Debugger::DkmInstructionAddress* instruction_address,
         _In_ bool                                                          ShowAsException,
-        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
+        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* event_descriptor) override;
 
 private:
     ChildDebuggerSettings                                                settings;

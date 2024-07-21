@@ -86,11 +86,11 @@ options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
             result.child_args.reserve(argc - arg_next);
             for(int arg_j = arg_next; arg_j < argc; ++arg_j)
             {
-                result.child_args.push_back(argv[arg_j]);
+                result.child_args.emplace_back(argv[arg_j]);
             }
             break;
         }
-        else if(child_path != std::nullopt)
+        else if(child_path.has_value())
         {
             print_error_and_exit(std::format(L"Multiple paths not supported: first was '{}' current is '{}'", child_path->c_str(), current_arg));
         }
@@ -147,7 +147,7 @@ void append_quoted_command_line_argument(std::wstring& command_line, std::wstrin
             command_line.append(num_backslashes * 2, L'\\');
             break;
         }
-        else if(*it == L'"')
+        if(*it == L'"')
         {
             command_line.append(num_backslashes * 2 + 1, L'\\');
             command_line.push_back(*it);
@@ -178,6 +178,7 @@ std::optional<std::wstring> make_command_line(const options& opts)
     return command_line;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays)
 int wmain(int argc, wchar_t* argv[])
 {
     const auto opts = parse_command_line(argc, argv);
@@ -214,7 +215,7 @@ int wmain(int argc, wchar_t* argv[])
 
     if(opts.suspend)
     {
-        const auto childMainThread = OpenThread(THREAD_SUSPEND_RESUME, false, process_info.dwThreadId);
+        auto* const childMainThread = OpenThread(THREAD_SUSPEND_RESUME, 0, process_info.dwThreadId);
         if(childMainThread == nullptr)
         {
             std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to open child process thread: " << result << std::endl;

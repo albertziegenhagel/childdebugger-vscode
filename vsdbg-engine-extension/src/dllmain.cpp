@@ -4,6 +4,7 @@
 
 #include "dllmain.h"
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 CChildDebuggerModule _AtlModule;
 
 extern "C" BOOL WINAPI DllMain([[maybe_unused]] HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved)

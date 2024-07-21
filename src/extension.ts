@@ -6,8 +6,8 @@ const outputChannelName = "Child Debugger";
 var outputChannel = vscode.window.createOutputChannel(outputChannelName);
 
 interface EngineProcessConfig {
-	applicationName: string|undefined,
-	commandLine: string|undefined,
+	applicationName: string | undefined,
+	commandLine: string | undefined,
 	attach: boolean,
 }
 interface EngineSettings {
@@ -160,12 +160,12 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		var processConfigs : EngineProcessConfig[] = [];
+		var processConfigs: EngineProcessConfig[] = [];
 		for (const entry of configuration.get<any[]>("filter.childProcesses", [])) {
 			processConfigs.push({
-				applicationName : entry['applicationName'],
-				commandLine : entry['commandLine'],
-				attach : entry['attach'],
+				applicationName: entry['applicationName'],
+				commandLine: entry['commandLine'],
+				attach: entry['attach'],
 			});
 		}
 

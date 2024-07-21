@@ -55,16 +55,11 @@ jobs:
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
   
-      - name: Build VSDbg Engine Extension
-        run: |
-          cd build
-          ninja
-
-      - name: Install VSDbg Engine Extension
+      - name: Build & Install VSDbg Engine Extension
         run: |
           cd build
           ninja install
-  
+
       - name: Add build info
         run: |
           "ref:    ${{ github.ref_name }}`n" + `

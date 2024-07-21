@@ -47,12 +47,12 @@ jobs:
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
-          -DCMAKE_INSTALL_PREFIX=vsdbg-engine-extension
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
   
-      - name: Build VSDbg Engine Extension
+      - name: Build & Install VSDbg Engine Extension
         run: |
           cd build
-          ninja
+          ninja install
 
       - name: Compile VSCode Test Sources
         run: npm run pretest

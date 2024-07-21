@@ -11,22 +11,22 @@
 
 struct ProcessConfig
 {
-    std::optional<std::wstring> applicationName = std::nullopt;
-    std::optional<std::wstring> commandLine     = std::nullopt;
-    bool                        attach          = true;
+    std::optional<std::wstring> application_name = std::nullopt;
+    std::optional<std::wstring> command_line     = std::nullopt;
+    bool                        attach           = true;
 };
 
 struct ChildDebuggerSettings
 {
     bool enabled = false;
 
-    bool suspendChildren = true;
-    bool suspendParents  = true;
+    bool suspend_children = true;
+    bool suspend_parents  = true;
 
-    bool skipInitialBreakpoint = true;
+    bool skip_initial_breakpoint = true;
 
-    std::vector<ProcessConfig> processConfigs;
-    bool                       attachOthers = true;
+    std::vector<ProcessConfig> process_configs;
+    bool                       attach_others = true;
 };
 
 class ATL_NO_VTABLE CChildDebuggerService :
@@ -48,31 +48,31 @@ public:
     CChildDebuggerService& operator=(CChildDebuggerService&&) = delete;
 
 public:
-    virtual HRESULT STDMETHODCALLTYPE SendLower(
+    HRESULT STDMETHODCALLTYPE SendLower(
         Microsoft::VisualStudio::Debugger::DkmCustomMessage*  custom_message,
-        Microsoft::VisualStudio::Debugger::DkmCustomMessage** ppReplyMessage) override;
+        Microsoft::VisualStudio::Debugger::DkmCustomMessage** reply_message) override;
 
-    virtual HRESULT STDMETHODCALLTYPE OnModuleInstanceLoad(
+    HRESULT STDMETHODCALLTYPE OnModuleInstanceLoad(
         _In_ Microsoft::VisualStudio::Debugger::DkmModuleInstance* module_instance,
-        _In_ Microsoft::VisualStudio::Debugger::DkmWorkList* pWorkList,
-        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
+        _In_ Microsoft::VisualStudio::Debugger::DkmWorkList* work_list,
+        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* event_descriptor) override;
 
-    virtual HRESULT STDMETHODCALLTYPE OnRuntimeBreakpoint(
+    HRESULT STDMETHODCALLTYPE OnRuntimeBreakpoint(
         _In_ Microsoft::VisualStudio::Debugger::Breakpoints::DkmRuntimeBreakpoint* runtime_breakpoint,
-        _In_ Microsoft::VisualStudio::Debugger::DkmThread* pThread,
-        _In_ bool                                          HasException,
-        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* pEventDescriptor) override;
+        _In_ Microsoft::VisualStudio::Debugger::DkmThread* thread,
+        _In_ bool                                          has_exception,
+        _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* event_descriptor) override;
 
-    virtual HRESULT STDMETHODCALLTYPE OnEmbeddedBreakpointHitReceived(
-        _In_ Microsoft::VisualStudio::Debugger::DkmThread* pThread,
+    HRESULT STDMETHODCALLTYPE OnEmbeddedBreakpointHitReceived(
+        _In_ Microsoft::VisualStudio::Debugger::DkmThread* thread,
         _In_opt_ Microsoft::VisualStudio::Debugger::DkmInstructionAddress* instruction_address,
-        _In_ bool                                                          ShowAsException,
+        _In_ bool                                                          show_as_exception,
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* event_descriptor) override;
 
 private:
-    ChildDebuggerSettings                                                settings;
-    std::ofstream                                                        logFile;
-    std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> createProcessFunctionNames;
+    ChildDebuggerSettings                                                settings_;
+    std::ofstream                                                        log_file_;
+    std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> create_process_function_names_;
 };
 
 OBJECT_ENTRY_AUTO(CChildDebuggerService::ClassId, CChildDebuggerService)

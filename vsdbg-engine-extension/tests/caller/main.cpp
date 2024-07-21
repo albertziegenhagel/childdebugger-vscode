@@ -7,7 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-struct options
+struct Options
 {
     std::filesystem::path     child_path;
     std::vector<std::wstring> child_args;
@@ -52,9 +52,9 @@ void print_usage()
     print_usage_and_exit(EXIT_FAILURE);
 }
 
-options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
+Options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-c-arrays,cppcoreguidelines-avoid-c-arrays)
 {
-    options                              result;
+    Options                              result;
     bool                                 help = false;
     std::optional<std::filesystem::path> child_path;
     for(int arg_i = 1; arg_i < argc; ++arg_i)
@@ -162,7 +162,7 @@ void append_quoted_command_line_argument(std::wstring& command_line, std::wstrin
     command_line.push_back(L'"');
 }
 
-std::optional<std::wstring> make_command_line(const options& opts)
+std::optional<std::wstring> make_command_line(const Options& opts)
 {
     if(opts.child_args.empty() && !opts.no_app_name) return std::nullopt;
 
@@ -215,8 +215,8 @@ int wmain(int argc, wchar_t* argv[])
 
     if(opts.suspend)
     {
-        auto* const childMainThread = OpenThread(THREAD_SUSPEND_RESUME, 0, process_info.dwThreadId);
-        if(childMainThread == nullptr)
+        auto* const child_main_thread = OpenThread(THREAD_SUSPEND_RESUME, 0, process_info.dwThreadId);
+        if(child_main_thread == nullptr)
         {
             std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to open child process thread: " << result << std::endl;
             return EXIT_FAILURE;
@@ -224,9 +224,9 @@ int wmain(int argc, wchar_t* argv[])
 
         std::this_thread::sleep_for(opts.suspend_sleep_time);
 
-        ResumeThread(childMainThread);
+        ResumeThread(child_main_thread);
         std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): resumed child" << std::endl;
-        CloseHandle(childMainThread);
+        CloseHandle(child_main_thread);
     }
 
     std::this_thread::sleep_for(opts.final_sleep_time);

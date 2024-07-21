@@ -7,9 +7,10 @@
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 CChildDebuggerModule _AtlModule;
 
-extern "C" BOOL WINAPI DllMain([[maybe_unused]] HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved)
+// NOLINTNEXTLINE(readability-identifier-naming)
+extern "C" BOOL WINAPI DllMain([[maybe_unused]] HINSTANCE instance, DWORD reason, LPVOID reserved)
 {
-    return _AtlModule.DllMain(dwReason, lpReserved);
+    return _AtlModule.DllMain(reason, reserved);
 }
 
 STDAPI DllCanUnloadNow(void)

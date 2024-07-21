@@ -1,0 +1,69 @@
+name: C++ lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  job:
+    name: lint
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: NuGet/setup-nuget@v1
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+  
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+  
+      - name: Install VSDbg Engine Extension Dependencies
+        run: |
+          nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
+          nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+  
+      - name: Configure VSDbg Engine Extension
+        run: |
+          mkdir "build"
+          cd "build"
+          cmake "..\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=Debug `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+  
+      - name: Generate files
+        run: |
+          cd "build"
+          ninja include\ChildDebugger.contract.h
+  
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo-root: 'vsdbg-engine-extension'
+          style: 'file'
+          tidy-checks: ''
+          ignore-tidy: '*.h' # Headers are not present in the compile_commands.json file
+          version: 18
+          ignore-format: 'src/nlohmann'
+          database: '../build'
+          extensions: 'cpp,h'
+          files-changed-only: falses
+          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
+
+      - name: Check for failure
+        if: steps.linter.outputs.checks-failed > 0
+        run: exit 1

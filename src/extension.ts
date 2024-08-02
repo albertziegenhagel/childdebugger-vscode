@@ -20,7 +20,7 @@ interface EngineSettings {
 	attachOthers: boolean
 }
 
-interface ChildDebuggerConfigurationExtension {
+export interface ChildDebuggerConfigurationExtension {
 	parentProcessId: number;
 	parentThreadId: number;
 	parentSuspended: boolean;

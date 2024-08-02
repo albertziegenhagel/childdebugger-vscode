@@ -3,10 +3,20 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <ranges>
 #include <thread>
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <WtsApi32.h>
+
+enum class CreateProcessMethod
+{
+    classic,
+    user,
+    token,
+    // logon
+};
 
 struct Options
 {
@@ -16,6 +26,9 @@ struct Options
     bool suspend     = false;
     bool wait        = false;
     bool no_app_name = false;
+    bool ansi        = false;
+
+    CreateProcessMethod method = CreateProcessMethod::classic;
 
     std::chrono::seconds init_sleep_time    = std::chrono::seconds(1);
     std::chrono::seconds suspend_sleep_time = std::chrono::seconds(30);
@@ -42,6 +55,26 @@ std::string utf16_to_utf8(const std::wstring& input)
     return result;
 }
 
+std::string utf16_to_ansi(const std::wstring& input)
+{
+    if(input.empty()) return {};
+
+    const auto result_size = WideCharToMultiByte(CP_ACP, 0,
+                                                 input.data(), static_cast<int>(input.size()),
+                                                 nullptr, 0,
+                                                 nullptr, nullptr);
+    assert(result_size > 0);
+
+    std::string result(result_size, '\0');
+    const auto  bytes_converted = WideCharToMultiByte(CP_ACP, 0,
+                                                      input.data(), static_cast<int>(input.size()),
+                                                      result.data(), result_size,
+                                                      nullptr, nullptr);
+    assert(bytes_converted != 0);
+
+    return result;
+}
+
 void print_usage()
 {
     std::wcout << L"Usage: caller.exe <Options> <Path> [- <Child Args>]\n"
@@ -55,6 +88,14 @@ void print_usage()
                << L"  --wait           Wait for the child process to terminate.\n"
                << L"  --no-app-name    Pass NULL to lpApplicationName and use\n"
                << L"                   lpCommandLine instead.\n"
+               << L"  --method <STR>   Which kind of create-process method to use:\n"
+               << L"                   'classic' - CreateProcessW(A).\n"
+               << L"                   'user'    - CreateProcessAsUserW(A).\n"
+               << L"                   'token'   - CreateProcessWithTokenW.\n"
+               //    << L"                   'logon'   - CreateProcessWithLogonW.\n"
+               << L"                   default: 'classic'\n"
+               << L"  --ansi           Use the ansi versions of the create-process\n"
+               << L"                   functions if available.\n"
                << L"  --init-time <MS>\n"
                << L"                   Time to wait for before starting the child\n"
                << L"                   process. In milliseconds.\n"
@@ -109,6 +150,36 @@ Options parse_command_line(int argc, wchar_t* argv[]) // NOLINT(modernize-avoid-
         else if(current_arg == L"--no-app-name")
         {
             result.no_app_name = true;
+        }
+        else if(current_arg == L"--method")
+        {
+            if(argc <= arg_i + 1) print_error_and_exit(L"Missing argument for --method.");
+            const auto next_arg = std::wstring_view(argv[++arg_i]);
+
+            if(next_arg == L"classic")
+            {
+                result.method = CreateProcessMethod::classic;
+            }
+            else if(next_arg == L"user")
+            {
+                result.method = CreateProcessMethod::user;
+            }
+            else if(next_arg == L"token")
+            {
+                result.method = CreateProcessMethod::token;
+            }
+            // else if(next_arg == L"logon")
+            // {
+            //     result.method = CreateProcessMethod::logon;
+            // }
+            else
+            {
+                print_error_and_exit(L"Invalid argument for --method.");
+            }
+        }
+        else if(current_arg == L"--ansi")
+        {
+            result.ansi = true;
         }
         else if(current_arg == L"--init-time")
         {
@@ -248,6 +319,157 @@ std::optional<std::wstring> make_command_line(const Options& opts)
     return command_line;
 }
 
+DWORD run_create_process(const Options&       opts,
+                         PROCESS_INFORMATION& process_info)
+{
+    auto command_line = make_command_line(opts);
+
+    const DWORD creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
+
+    switch(opts.method)
+    {
+    case CreateProcessMethod::classic:
+    {
+        if(opts.ansi)
+        {
+            STARTUPINFOA info = {sizeof(info)};
+
+            const auto child_path_a   = utf16_to_ansi(opts.child_path.native());
+            auto       command_line_a = command_line ? std::make_optional(utf16_to_ansi(command_line.value())) : std::nullopt;
+
+            return CreateProcessA(
+                opts.no_app_name ? nullptr : child_path_a.c_str(),
+                command_line_a ? command_line_a->data() : nullptr,
+                nullptr,
+                nullptr,
+                FALSE,
+                creation_flags,
+                nullptr,
+                nullptr,
+                &info,
+                &process_info);
+        }
+
+        STARTUPINFOW info = {sizeof(info)};
+
+        return CreateProcessW(
+            opts.no_app_name ? nullptr : opts.child_path.c_str(),
+            command_line ? command_line->data() : nullptr,
+            nullptr,
+            nullptr,
+            FALSE,
+            creation_flags,
+            nullptr,
+            nullptr,
+            &info,
+            &process_info);
+    }
+    break;
+    case CreateProcessMethod::user:
+    {
+        HANDLE user_token;
+        if(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY, &user_token) != TRUE)
+        {
+            std::wcout << L"Failed to get user token of current process." << std::endl;
+            std::quick_exit(EXIT_FAILURE);
+        }
+
+        if(opts.ansi)
+        {
+            STARTUPINFOA info = {sizeof(info)};
+
+            const auto child_path_a   = utf16_to_ansi(opts.child_path.native());
+            auto       command_line_a = command_line ? std::make_optional(utf16_to_ansi(command_line.value())) : std::nullopt;
+
+            const auto result = CreateProcessAsUserA(
+                user_token,
+                opts.no_app_name ? nullptr : child_path_a.c_str(),
+                command_line_a ? command_line_a->data() : nullptr,
+                nullptr,
+                nullptr,
+                FALSE,
+                creation_flags,
+                nullptr,
+                nullptr,
+                &info,
+                &process_info);
+
+            CloseHandle(user_token);
+
+            return result;
+        }
+
+        STARTUPINFOW info = {sizeof(info)};
+
+        const auto result = CreateProcessAsUserW(
+            user_token,
+            opts.no_app_name ? nullptr : opts.child_path.c_str(),
+            command_line ? command_line->data() : nullptr,
+            nullptr,
+            nullptr,
+            FALSE,
+            creation_flags,
+            nullptr,
+            nullptr,
+            &info,
+            &process_info);
+
+        CloseHandle(user_token);
+
+        return result;
+    }
+    break;
+    case CreateProcessMethod::token:
+    {
+        HANDLE user_token;
+        if(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY, &user_token) != TRUE)
+        {
+            std::wcout << L"Failed to get user token of current process." << std::endl;
+            std::quick_exit(EXIT_FAILURE);
+        }
+
+        STARTUPINFOW info = {sizeof(info)};
+
+        const auto result = CreateProcessWithTokenW(
+            user_token,
+            0,
+            opts.no_app_name ? nullptr : opts.child_path.c_str(),
+            command_line ? command_line->data() : nullptr,
+            creation_flags,
+            nullptr,
+            nullptr,
+            &info,
+            &process_info);
+
+        CloseHandle(user_token);
+
+        return result;
+    }
+    break;
+    // case CreateProcessMethod::logon:
+    // {
+    //     // HANDLE       token;
+    //     // DWORD        logon_flags;
+    //     // STARTUPINFOW info = {sizeof(info)};
+
+    //     // return CreateProcessWithLogonW(
+    //     //     token,
+    //     //     logon_flags,
+    //     //     opts.no_app_name ? nullptr : opts.child_path.c_str(),
+    //     //     command_line ? command_line->data() : nullptr,
+    //     //     creation_flags,
+    //     //     nullptr,
+    //     //     nullptr,
+    //     //     &info,
+    //     //     &process_info);
+    // }
+    // break;
+    default:
+        std::wcout << L"Internal error: invalid create-process method." << std::endl;
+        std::quick_exit(EXIT_FAILURE);
+    }
+}
+
 // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays)
 int wmain(int argc, wchar_t* argv[])
 {
@@ -257,27 +479,12 @@ int wmain(int argc, wchar_t* argv[])
 
     std::this_thread::sleep_for(opts.init_sleep_time);
 
-    auto command_line = make_command_line(opts);
-
-    const DWORD         creation_flags = opts.suspend ? CREATE_SUSPENDED : 0;
-    STARTUPINFOW        info           = {sizeof(info)};
     PROCESS_INFORMATION process_info;
 
-    const auto result = CreateProcessW(
-        opts.no_app_name ? nullptr : opts.child_path.c_str(),
-        command_line ? command_line->data() : nullptr,
-        nullptr,
-        nullptr,
-        FALSE,
-        creation_flags,
-        nullptr,
-        nullptr,
-        &info,
-        &process_info);
-
+    const auto result = run_create_process(opts, process_info);
     if(result == FALSE)
     {
-        std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to create child process: " << result << std::endl;
+        std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to create child process: " << GetLastError() << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -289,6 +496,8 @@ int wmain(int argc, wchar_t* argv[])
         if(child_main_thread == nullptr)
         {
             std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): failed to open child process thread: " << result << std::endl;
+            CloseHandle(process_info.hThread);
+            CloseHandle(process_info.hProcess);
             return EXIT_FAILURE;
         }
 
@@ -308,6 +517,9 @@ int wmain(int argc, wchar_t* argv[])
     }
 
     std::wcout << L"  CALLER (" << GetCurrentProcessId() << L"): terminating" << std::endl;
+
+    CloseHandle(process_info.hThread);
+    CloseHandle(process_info.hProcess);
 
     return EXIT_SUCCESS;
 }

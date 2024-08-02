@@ -9,6 +9,10 @@ target_compile_features(caller
     cxx_std_23
 )
 
+target_link_libraries(caller
+  wtsapi32.lib
+)
+
 add_executable(callee
   callee/main.cpp
 )

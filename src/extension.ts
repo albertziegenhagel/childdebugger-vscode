@@ -144,7 +144,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	vscode.debug.onDidStartDebugSession((session: vscode.DebugSession) => {
+	vscode.debug.onDidStartDebugSession(async (session: vscode.DebugSession) => {
 		const configuration = vscode.workspace.getConfiguration("childDebugger");
 		if (configuration === null || configuration === undefined) {
 			return;
@@ -158,6 +158,7 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
+		// Build settings to be send to the new debug session.
 		var processConfigs: EngineProcessConfig[] = [];
 		for (const entry of configuration.get<any[]>("filter.childProcesses", [])) {
 			processConfigs.push({
@@ -180,16 +181,21 @@ export function activate(context: vscode.ExtensionContext) {
 		};
 
 		// Send the settings to the debug engine extension in the new session.
-		session.customRequest("vsCustomMessage", {
-			message: {
-				sourceId: childDebuggerSourceId,
-				messageCode: CustomMessageType.settings.valueOf(),
-				parameter1: JSON.stringify(engineSettings),
-			}
-		}).then((response) => {
-		}, (reason) => {
+		try {
+			// wait for this message to arrive before continuing to make sure
+			// the debug session will not be terminated (when we resume the child/parent)
+			// before we had a chance to deliver this message.
+			await session.customRequest("vsCustomMessage", {
+				message: {
+					sourceId: childDebuggerSourceId,
+					messageCode: CustomMessageType.settings.valueOf(),
+					parameter1: JSON.stringify(engineSettings),
+				}
+			});
+		}
+		catch (reason) {
 			outputChannel.appendLine(`  Sending child debugger settings failed: "${reason}"`);
-		});
+		}
 
 		// If this is not a debug session that we started for a child process,
 		// there is nothing else we need to do.
@@ -199,26 +205,35 @@ export function activate(context: vscode.ExtensionContext) {
 		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = session.configuration.childDebuggerExtension;
 
 		// If the child was suspended, send a request to resume it.
+		// If it was not suspended by us, but we still want to skip over the initial breakpoint,
+		// we will send a message anyways.
+		// Only if we neither suspended the child process, nor do we want to skip the
+		// initial breakpoint, we can skip sending a message.
 		if (debuggerConfigExtension.childSuspended || engineSettings.skipInitialBreakpoint) {
-			outputChannel.appendLine(`Resume child process ${debuggerConfigExtension.childProcessId}:`);
-			session.customRequest("vsCustomMessage", {
-				message: {
-					sourceId: childDebuggerSourceId,
-					messageCode: debuggerConfigExtension.childSuspended ? CustomMessageType.resumeChild.valueOf() : CustomMessageType.informChild.valueOf(),
-					parameter1: debuggerConfigExtension.childProcessId,
-					parameter2: debuggerConfigExtension.childThreadId
-				}
-			}).then((response) => {
-				// outputChannel.appendLine(`  vsCustomMessage resume child: succeeded: ${response}`);
-			}, (reason) => {
+			outputChannel.appendLine(`Resume child process ${debuggerConfigExtension.childProcessId}`);
+			try {
+				// Wait for this message to arrive before resuming the parent process.
+				// Otherwise, the parent could resume the child process before we had a chance to
+				// deliver this message, which could either make the child being already
+				// stuck in the initial breakpoint, or it might even have terminated already.
+				await session.customRequest("vsCustomMessage", {
+					message: {
+						sourceId: childDebuggerSourceId,
+						messageCode: debuggerConfigExtension.childSuspended ? CustomMessageType.resumeChild.valueOf() : CustomMessageType.informChild.valueOf(),
+						parameter1: debuggerConfigExtension.childProcessId,
+						parameter2: debuggerConfigExtension.childThreadId
+					}
+				});
+			}
+			catch (reason) {
 				outputChannel.appendLine(`  Resume child message failed: "${reason}"`);
-			});
+			};
 		}
 
 		// If the parent was suspended, send a request to resume it.
 		if (debuggerConfigExtension.parentSuspended &&
 			session.parentSession !== undefined) {
-			outputChannel.appendLine(`Resume parent process for ${debuggerConfigExtension.childProcessId}:`);
+			outputChannel.appendLine(`Resume parent process for ${debuggerConfigExtension.childProcessId}`);
 			session.parentSession.customRequest("vsCustomMessage", {
 				message: {
 					sourceId: childDebuggerSourceId,
@@ -229,7 +244,7 @@ export function activate(context: vscode.ExtensionContext) {
 			}).then((response) => {
 				// outputChannel.appendLine(`  vsCustomMessage resume parent: succeeded: ${response}`);
 			}, (reason) => {
-				outputChannel.appendLine(`  Resume parent message: failed: "${reason}"`);
+				outputChannel.appendLine(`  Resume parent message failed: "${reason}"`);
 			});
 		}
 	});

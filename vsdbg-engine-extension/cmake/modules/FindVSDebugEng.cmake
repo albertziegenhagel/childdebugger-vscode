@@ -43,23 +43,38 @@ find_path(VSDebugEng_INCLUDE_DIR
     inc
 )
 
-set(_find_vsdebugend_lib_path_suffix)
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-  set(_find_vsdebugend_lib_path_suffix "import-lib/x86")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-  set(_find_vsdebugend_lib_path_suffix "import-lib/x64")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm")
-  set(_find_vsdebugend_lib_path_suffix "import-lib/arm")
-elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-  set(_find_vsdebugend_lib_path_suffix "import-lib/arm64")
+set(_arch_sub_dir)
+if(MSVC)
+  if("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "X86")
+    set(_arch_sub_dir "x86")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "x64")
+    set(_arch_sub_dir "x64")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "ARMV7")
+    set(_arch_sub_dir "arm")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "ARM64")
+    set(_arch_sub_dir "arm64")
+  endif()
+else()
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86|AMD64")
+    if("${CMAKE_SIZEOF_VOID_P}" EQUAL "4")
+      set(_arch_sub_dir "x86")
+    else()
+      set(_arch_sub_dir "x64")
+    endif()
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM64")
+    if("${CMAKE_SIZEOF_VOID_P}" EQUAL "4")
+      set(_arch_sub_dir "arm")
+    else()
+      set(_arch_sub_dir "arm64")
+    endif()
+  endif()
 endif()
 
 find_library(VSDebugEng_LIBRARY
   NAMES vsdebugeng
   PATH_SUFFIXES
-    ${_find_vsdebugend_lib_path_suffix}
+    "import-lib/${_arch_sub_dir}"
 )
-unset(_find_vsdebugend_lib_path_suffix)
 
 mark_as_advanced(
   VSDebugEng_INCLUDE_DIR

@@ -6,6 +6,8 @@ project(ChildDebuggerExtension VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 
+option(CHILDDEBUGGER_INSTALL_PDB "Install PDB files with the DLLs" OFF)
+
 find_package(VSDebugEng REQUIRED)
 find_package(VSDebugConfigTool REQUIRED)
 
@@ -74,6 +76,14 @@ install(
     ChildDebugger
   RUNTIME DESTINATION "bin/${_arch_sub_dir}"
 )
+if(CHILDDEBUGGER_INSTALL_PDB)
+  install(
+    FILES
+      "$<TARGET_PDB_FILE:ChildDebugger>"
+    DESTINATION "bin/${_arch_sub_dir}"
+    OPTIONAL
+  )
+endif()
 
 install(
   FILES

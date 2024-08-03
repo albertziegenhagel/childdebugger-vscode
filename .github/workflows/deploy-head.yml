@@ -1,7 +1,13 @@
 name: "Deploy head"
 
 on:
-  workflow_call
+  workflow_run:
+    workflows:
+      - Package
+    types:
+      - completed
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -59,35 +65,26 @@ jobs:
 
     steps:
       - name: Download build artifact (vsix)
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: ci.yml
-          workflow_conclusion: in_progress
-          branch: ${{ github.ref_name }}
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
           name: childdebugger-win32-x64
-          check_artifacts:  true
-          search_artifacts: true
 
       - name: Download build artifacts (tests)
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: ci.yml
-          workflow_conclusion: in_progress
-          branch: ${{ github.ref_name }}
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
           name: childdebugger-win32-x64-tests
-          check_artifacts:  true
-          search_artifacts: true
           skip_unpack: true
 
       - name: Download build artifacts (debug symbols)
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: ci.yml
-          workflow_conclusion: in_progress
-          branch: ${{ github.ref_name }}
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
           name: childdebugger-win32-x64-debug-symbols
-          check_artifacts:  true
-          search_artifacts: true
           skip_unpack: true
 
       - name: Upload release asset (vsix)
@@ -145,7 +142,7 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
           -H "X-GitHub-Api-Version: 2022-11-28" `
           -H "Content-Type: application/zip" `
-          --data-binary "@childdebugger-win32-x64.vsix" `
+          --data-binary "@childdebugger-win32-x64-tests.zip" `
           "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-x64-tests.zip"
 
       - name: Upload release asset (debug-sybols)
@@ -174,7 +171,7 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
           -H "X-GitHub-Api-Version: 2022-11-28" `
           -H "Content-Type: application/zip" `
-          --data-binary "@childdebugger-win32-x64.vsix" `
+          --data-binary "@childdebugger-win32-x64-debug-symbols.zip" `
           "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-x64-debug-symbols.zip"
 
   publish:

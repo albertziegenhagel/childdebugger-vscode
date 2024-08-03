@@ -121,9 +121,3 @@ jobs:
             ${{ github.workspace }}/vsdbg-engine-extension/bin/x64/ChildDebugger.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/x86/ChildDebugger.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
-
-  deploy-head:
-    name: "Deploy head"
-    needs: package
-    if: github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/deploy-head.yml

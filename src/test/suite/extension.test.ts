@@ -60,16 +60,10 @@ async function startDebuggingAndWait(configuration: vscode.DebugConfiguration) {
 	return { startedSessions, output };
 }
 
-suite('Auto attach', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+function testArchitecture(callerPath: string, calleePath: string, arch: string) {
 
-	const testExeDir = path.join(__dirname, "..", "..", "..", "build", "tests", "bin");
-
-	const callerPath = path.join(testExeDir, "caller.exe");
-	const calleePath = path.join(testExeDir, "callee.exe");
-
-	test('Attach once', async () => {
-		vscode.window.showInformationMessage('RUN Attach once.');
+	test(`Attach once (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach once (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -115,8 +109,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach non existent', async () => {
-		vscode.window.showInformationMessage('RUN non existent.');
+	test(`Attach non existent (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN non existent (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -127,7 +121,7 @@ suite('Auto attach', () => {
 				"--init-time", "0",
 				"--final-time", "0",
 				"--wait",
-				path.join(testExeDir, "does-not-exist.exe"),
+				path.join(__dirname, "does-not-exist.exe"),
 				"-",
 				"--sleep-time", "0"
 			],
@@ -142,8 +136,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach recursive', async () => {
-		vscode.window.showInformationMessage('RUN Attach recursive.');
+	test(`Attach recursive (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach recursive (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -219,8 +213,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach suspended', async () => {
-		vscode.window.showInformationMessage('RUN Attach suspended.');
+	test(`Attach suspended (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach suspended (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -270,8 +264,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach only command line', async () => {
-		vscode.window.showInformationMessage('RUN Attach Only Command Line.');
+	test(`Attach only command line (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach Only Command Line (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -319,8 +313,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach once ANSI', async () => {
-		vscode.window.showInformationMessage('RUN Attach ANSI.');
+	test(`Attach once ANSI (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach ANSI (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -368,8 +362,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach only command line ANSI', async () => {
-		vscode.window.showInformationMessage('RUN Attach Only Command Line ANSI.');
+	test(`Attach only command line ANSI (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach Only Command Line ANSI (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -418,8 +412,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach once User', async () => {
-		vscode.window.showInformationMessage('RUN Attach user.');
+	test(`Attach once User (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach user (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -467,8 +461,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	test('Attach once User ANSI', async () => {
-		vscode.window.showInformationMessage('RUN Attach user ANSI.');
+	test(`Attach once User ANSI (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach user ANSI (${arch}).`);
 
 		const result = await startDebuggingAndWait({
 			type: "cppvsdbg",
@@ -517,8 +511,8 @@ suite('Auto attach', () => {
 
 	}).timeout(100000);
 
-	// test('Attach once Token', async () => {
-	// 	vscode.window.showInformationMessage('RUN Attach Token.');
+	// test(`Attach once Token (${arch})`, async () => {
+	// 	vscode.window.showInformationMessage(`RUN Attach Token (${arch}).`);
 
 	// 	const result = await startDebuggingAndWait({
 	// 		type: "cppvsdbg",
@@ -566,4 +560,22 @@ suite('Auto attach', () => {
 
 	// }).timeout(100000);
 
+}
+
+suite('Auto attach x64', () => {
+	const testExeDirX64 = path.join(__dirname, "..", "..", "..", "build-x64", "tests", "bin");
+
+	const callerPathX64 = path.join(testExeDirX64, "caller.exe");
+	const calleePathX64 = path.join(testExeDirX64, "callee.exe");
+
+	testArchitecture(callerPathX64, calleePathX64, "x64");
+});
+
+suite('Auto attach x86', () => {
+	const testExeDirX86 = path.join(__dirname, "..", "..", "..", "build-x86", "tests", "bin");
+
+	const callerPathX86 = path.join(testExeDirX86, "caller.exe");
+	const calleePathX86 = path.join(testExeDirX86, "callee.exe");
+
+	testArchitecture(callerPathX86, calleePathX86, "x86");
 });

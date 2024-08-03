@@ -274,68 +274,199 @@ protected:
 
 struct CreateProcessStack
 {
-    UINT64 return_address;
+#if defined(_X86_) || defined(_ARM_)
+    using ptr_int_t = UINT32;
+#else
+    using ptr_int_t = UINT64;
+#endif
 
-    UINT64 lpApplicationName;    // NOLINT(readability-identifier-naming)
-    UINT64 lpCommandLine;        // NOLINT(readability-identifier-naming)
-    UINT64 lpProcessAttributes;  // NOLINT(readability-identifier-naming)
-    UINT64 lpThreadAttributes;   // NOLINT(readability-identifier-naming)
-    UINT8  bInheritHandles;      // NOLINT(readability-identifier-naming)
-    UINT8  Padding1;             // NOLINT(readability-identifier-naming)
-    UINT16 Padding2;             // NOLINT(readability-identifier-naming)
-    UINT32 Padding3;             // NOLINT(readability-identifier-naming)
-    UINT32 dwCreationFlags;      // NOLINT(readability-identifier-naming)
-    UINT32 Padding4;             // NOLINT(readability-identifier-naming)
-    UINT64 lpEnvironment;        // NOLINT(readability-identifier-naming)
-    UINT64 lpCurrentDirectory;   // NOLINT(readability-identifier-naming)
-    UINT64 lpStartupInfo;        // NOLINT(readability-identifier-naming)
-    UINT64 lpProcessInformation; // NOLINT(readability-identifier-naming)
+    ptr_int_t return_address;
 
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    static DWORD64 get_lpApplicationName_from_register(const CONTEXT& context)
+    ptr_int_t lpApplicationName;   // NOLINT(readability-identifier-naming)
+    ptr_int_t lpCommandLine;       // NOLINT(readability-identifier-naming)
+    ptr_int_t lpProcessAttributes; // NOLINT(readability-identifier-naming)
+    ptr_int_t lpThreadAttributes;  // NOLINT(readability-identifier-naming)
+    UINT8     bInheritHandles;     // NOLINT(readability-identifier-naming)
+    UINT8     Padding1;            // NOLINT(readability-identifier-naming)
+    UINT16    Padding2;            // NOLINT(readability-identifier-naming)
+#if defined(_AMD64_) || defined(_ARM64_)
+    UINT32 Padding3; // NOLINT(readability-identifier-naming)
+#endif
+    UINT32 dwCreationFlags; // NOLINT(readability-identifier-naming)
+#if defined(_AMD64_) || defined(_ARM64_)
+    // UINT32       Padding4;             // NOLINT(readability-identifier-naming)
+#endif
+    ptr_int_t lpEnvironment;        // NOLINT(readability-identifier-naming)
+    ptr_int_t lpCurrentDirectory;   // NOLINT(readability-identifier-naming)
+    ptr_int_t lpStartupInfo;        // NOLINT(readability-identifier-naming)
+    ptr_int_t lpProcessInformation; // NOLINT(readability-identifier-naming)
+
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] ptr_int_t get_lpApplicationName([[maybe_unused]] const CONTEXT& context) const
     {
+#if defined(_X86_)
+        return lpApplicationName;
+#elif defined(_AMD64_)
         return context.Rcx;
+#elif defined(_ARM_)
+        return context.R9;
+#elif defined(_ARM64_)
+        return context.X9;
+#endif
     }
 
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    static DWORD64 get_lpCommandLine_from_register(const CONTEXT& context)
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] ptr_int_t get_lpCommandLine([[maybe_unused]] const CONTEXT& context) const
     {
+#if defined(_X86_)
+        return lpCommandLine;
+#elif defined(_AMD64_)
         return context.Rdx;
+#elif defined(_ARM_)
+        return context.R1;
+#elif defined(_ARM64_)
+        return context.X0;
+#endif
+    }
+
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_lpProcessInformation([[maybe_unused]] const CONTEXT& context) const
+    {
+#if defined(_X86_)
+        return lpProcessInformation;
+#elif defined(_AMD64_)
+        return lpProcessInformation;
+#elif defined(_ARM_)
+        return context.R2;
+#elif defined(_ARM64_)
+        return context.X2;
+#endif
+    }
+
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_return_address([[maybe_unused]] const CONTEXT& context) const
+    {
+#if defined(_X86_) || defined(_AMD64_)
+        return return_address;
+#elif defined(_ARM_)
+        return context.Lr;
+#elif defined(_ARM64_)
+        return context.Lr;
+#endif
     }
 };
 
 struct CreateProcessAsUserStack
 {
-    UINT64 return_address; // NOLINT(readability-identifier-naming)
+#if defined(_X86_) || defined(_ARM_)
+    using ptr_int_t = UINT32;
+#else
+    using ptr_int_t = UINT64;
+#endif
 
-    UINT64 hToken; // NOLINT(readability-identifier-naming)
+    ptr_int_t return_address; // NOLINT(readability-identifier-naming)
 
-    UINT64 lpApplicationName;    // NOLINT(readability-identifier-naming)
-    UINT64 lpCommandLine;        // NOLINT(readability-identifier-naming)
-    UINT64 lpProcessAttributes;  // NOLINT(readability-identifier-naming)
-    UINT64 lpThreadAttributes;   // NOLINT(readability-identifier-naming)
-    UINT8  bInheritHandles;      // NOLINT(readability-identifier-naming)
-    UINT8  Padding1;             // NOLINT(readability-identifier-naming)
-    UINT16 Padding2;             // NOLINT(readability-identifier-naming)
-    UINT32 Padding3;             // NOLINT(readability-identifier-naming)
-    UINT32 dwCreationFlags;      // NOLINT(readability-identifier-naming)
-    UINT32 Padding4;             // NOLINT(readability-identifier-naming)
-    UINT64 lpEnvironment;        // NOLINT(readability-identifier-naming)
-    UINT64 lpCurrentDirectory;   // NOLINT(readability-identifier-naming)
-    UINT64 lpStartupInfo;        // NOLINT(readability-identifier-naming)
-    UINT64 lpProcessInformation; // NOLINT(readability-identifier-naming)
+    ptr_int_t hToken; // NOLINT(readability-identifier-naming)
 
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    static DWORD64 get_lpApplicationName_from_register(const CONTEXT& context)
+    ptr_int_t lpApplicationName;   // NOLINT(readability-identifier-naming)
+    ptr_int_t lpCommandLine;       // NOLINT(readability-identifier-naming)
+    ptr_int_t lpProcessAttributes; // NOLINT(readability-identifier-naming)
+    ptr_int_t lpThreadAttributes;  // NOLINT(readability-identifier-naming)
+    UINT8     bInheritHandles;     // NOLINT(readability-identifier-naming)
+    UINT8     Padding1;            // NOLINT(readability-identifier-naming)
+    UINT16    Padding2;            // NOLINT(readability-identifier-naming)
+#if defined(_AMD64_) || defined(_ARM64_)
+    UINT32 Padding3; // NOLINT(readability-identifier-naming)
+#endif
+    UINT32 dwCreationFlags; // NOLINT(readability-identifier-naming)
+#if defined(_AMD64_) || defined(_ARM64_)
+    UINT32 Padding4; // NOLINT(readability-identifier-naming)
+#endif
+    ptr_int_t lpEnvironment;        // NOLINT(readability-identifier-naming)
+    ptr_int_t lpCurrentDirectory;   // NOLINT(readability-identifier-naming)
+    ptr_int_t lpStartupInfo;        // NOLINT(readability-identifier-naming)
+    ptr_int_t lpProcessInformation; // NOLINT(readability-identifier-naming)
+
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_lpApplicationName([[maybe_unused]] const CONTEXT& context) const
     {
+#if defined(_X86_)
+        return lpApplicationName;
+#elif defined(_AMD64_)
         return context.Rdx;
+#elif defined(_ARM_)
+        return context.R1;
+#elif defined(_ARM64_)
+        return context.X1;
+#endif
     }
-    // NOLINTNEXTLINE(readability-identifier-naming)
-    static DWORD64 get_lpCommandLine_from_register(const CONTEXT& context)
+
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_lpCommandLine([[maybe_unused]] const CONTEXT& context) const
     {
+#if defined(_X86_)
+        return lpCommandLine;
+#elif defined(_AMD64_)
         return context.R8;
+#elif defined(_ARM_)
+        return context.R2;
+#elif defined(_ARM64_)
+        return context.X2;
+#endif
+    }
+
+    // NOLINTNEXTLINE(readability-identifier-naming, readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_lpProcessInformation([[maybe_unused]] const CONTEXT& context) const
+    {
+#if defined(_X86_)
+        return lpProcessInformation;
+#elif defined(_AMD64_)
+        return lpProcessInformation;
+#elif defined(_ARM_)
+        return lpProcessInformation;
+#elif defined(_ARM64_)
+        return lpProcessInformation;
+#endif
+    }
+
+    // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+    [[nodiscard]] DWORD64 get_return_address([[maybe_unused]] const CONTEXT& context) const
+    {
+#if defined(_X86_) || defined(_AMD64_)
+        return return_address;
+#elif defined(_ARM_)
+        return context.Lr;
+#elif defined(_ARM64_)
+        return context.Lr;
+#endif
     }
 };
+
+[[nodiscard]] inline auto get_stack_pointer(const CONTEXT& context)
+{
+#if defined(_X86_)
+    return context.Esp;
+#elif defined(_AMD64_)
+    return context.Rsp;
+#elif defined(_ARM_)
+    return context.Sp;
+#elif defined(_ARM64_)
+    return context.Sp;
+#endif
+}
+
+[[nodiscard]] inline auto get_return_value(const CONTEXT& context)
+{
+#if defined(_X86_)
+    return context.Eax;
+#elif defined(_AMD64_)
+    return context.Rax;
+#elif defined(_ARM_)
+    return context.R0;
+#elif defined(_ARM64_)
+    return context.X0;
+#endif
+}
 
 // TODO: add parameter stack definitions for `CreateProcessWithToken` and `CreateProcessWithLogon`.
 
@@ -423,11 +554,24 @@ HRESULT handle_call_to_create_process(
     const CONTEXT&               context,
     bool                         is_unicode)
 {
+    const auto stack_pointer = get_stack_pointer(context);
+    // The other function arguments are passed on the stack, hence we need to extract it.
+    // Assuming x64 calling conventions, the pointer to the stack frame is stored in the
+    // RSP register.
+    StackType  stack;
+    if(thread->Process()->ReadMemory(stack_pointer, DkmReadMemoryFlags::None, &stack, sizeof(StackType), nullptr) != S_OK)
+    {
+        log_file << "  FAILED to read stack.\n";
+        log_file.flush();
+        return S_FALSE;
+    }
+    log_file << "  dwCreationFlags=" << stack.dwCreationFlags << "\n";
+
     // Extract the application name from the passed arguments.
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
     // RCX register for `CreateProcessA` and `CreateProcessW`.
     CComPtr<DkmString> application_name;
-    if(read_string_from_memory_at(thread->Process(), StackType::get_lpApplicationName_from_register(context), is_unicode, application_name) != S_OK)
+    if(read_string_from_memory_at(thread->Process(), stack.get_lpApplicationName(context), is_unicode, application_name) != S_OK)
     {
         log_file << "  FAILED to read application name argument.\n";
         log_file.flush();
@@ -443,7 +587,7 @@ HRESULT handle_call_to_create_process(
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
     // RDX register for `CreateProcessA` and `CreateProcessW`.
     CComPtr<DkmString> command_line;
-    if(read_string_from_memory_at(thread->Process(), StackType::get_lpCommandLine_from_register(context), is_unicode, command_line) != S_OK)
+    if(read_string_from_memory_at(thread->Process(), stack.get_lpCommandLine(context), is_unicode, command_line) != S_OK)
     {
         log_file << "  FAILED to read command line argument.\n";
         log_file.flush();
@@ -456,18 +600,6 @@ HRESULT handle_call_to_create_process(
     }
 
     if(!check_attach_to_process(settings, log_file, application_name, command_line)) return S_OK;
-
-    // The other function arguments are passed on the stack, hence we need to extract it.
-    // Assuming x64 calling conventions, the pointer to the stack frame is stored in the
-    // RSP register.
-    StackType stack;
-    if(thread->Process()->ReadMemory(context.Rsp, DkmReadMemoryFlags::None, &stack, sizeof(StackType), nullptr) != S_OK)
-    {
-        log_file << "  FAILED to read stack.\n";
-        log_file.flush();
-        return S_FALSE;
-    }
-    log_file << "  dwCreationFlags=" << stack.dwCreationFlags << "\n";
 
     // If want to suspend the child process and it is not already requested to be suspended
     // originally, we enforce a suspended process creation.
@@ -485,7 +617,7 @@ HRESULT handle_call_to_create_process(
         CAutoDkmArray<BYTE> new_flags_bytes;
         DkmAllocArray(sizeof(stack.dwCreationFlags), &new_flags_bytes);
         memcpy(new_flags_bytes.Members, &new_flags, sizeof(stack.dwCreationFlags));
-        if(thread->Process()->WriteMemory(context.Rsp + offsetof(StackType, dwCreationFlags), new_flags_bytes) != S_OK)
+        if(thread->Process()->WriteMemory(stack_pointer + offsetof(StackType, dwCreationFlags), new_flags_bytes) != S_OK)
         {
             log_file << "  FAILED to force suspended start.\n";
             log_file.flush();
@@ -501,18 +633,18 @@ HRESULT handle_call_to_create_process(
     }
 
     // Now, retrieve the return address for this function call.
-    UINT64 return_address;
-    UINT64 frame_base;
-    UINT64 vframe;
-    if(thread->GetCurrentFrameInfo(&return_address, &frame_base, &vframe) != S_OK)
-    {
-        log_file << "  FAILED to retrieve function return address.\n";
-        log_file.flush();
-        return S_FALSE;
-    }
+    // UINT64 return_address;
+    // UINT64 frame_base;
+    // UINT64 vframe;
+    // if(thread->GetCurrentFrameInfo(&return_address, &frame_base, &vframe) != S_OK)
+    // {
+    //     log_file << "  FAILED to retrieve function return address.\n";
+    //     log_file.flush();
+    //     return S_FALSE;
+    // }
 
     CComPtr<DkmInstructionAddress> address;
-    if(thread->Process()->CreateNativeInstructionAddress(return_address, &address) != S_OK)
+    if(thread->Process()->CreateNativeInstructionAddress(stack.get_return_address(context), &address) != S_OK)
     {
         log_file << "  FAILED to create native instruction address from function return address.\n";
         log_file.flush();
@@ -521,7 +653,7 @@ HRESULT handle_call_to_create_process(
 
     // Create a new breakpoint to be triggered when the child process creation is done.
     CComPtr<CreateOutInfo> out_info;
-    out_info.Attach(new CreateOutInfo(stack.lpProcessInformation, forced_suspension));
+    out_info.Attach(new CreateOutInfo(stack.get_lpProcessInformation(context), forced_suspension));
 
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
     if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
@@ -911,8 +1043,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         }
 
         // The RAX register holds the return value.
-        log_file_ << "  CreateProcess returned " << context.Rax << "\n";
-        if(context.Rax == 0)
+        log_file_ << "  CreateProcess returned " << get_return_value(context) << "\n";
+        if(get_return_value(context) == 0)
         {
             // Nothing to attach to if the CreateProcess call failed.
             log_file_.flush();

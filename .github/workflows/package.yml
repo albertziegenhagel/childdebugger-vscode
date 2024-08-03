@@ -36,35 +36,54 @@ jobs:
           cmakeVersion: "~3.25.0"
           ninjaVersion: "^1.11.1"
   
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
-        with:
-          arch: x64
-  
       - name: Install VSDbg Engine Extension Dependencies
         run: |
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
   
-      - name: Configure VSDbg Engine Extension
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+  
+      - name: Configure VSDbg Engine Extension (x64)
         run: |
-          mkdir build
-          cd build
+          mkdir build-x64
+          cd build-x64
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
   
-      - name: Build & Install VSDbg Engine Extension
+      - name: Build & Install VSDbg Engine Extension (x64)
         run: |
-          cd build
+          cd build-x64
+          ninja install
+
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x86
+  
+      - name: Configure VSDbg Engine Extension (x86)
+        run: |
+          mkdir build-x86
+          cd build-x86
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=Debug `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+  
+      - name: Build & Install VSDbg Engine Extension (x86)
+        run: |
+          cd build-x86
           ninja install
 
       - name: Add build info
         run: |
           "ref:    ${{ github.ref_name }}`n" + `
           "commit: ${{ github.sha }}`n"  + `
-          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/build/bin/info.txt"
+          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/build-x64/bin/info.txt"
     
       - name: Package VSIX
         run: |
@@ -82,19 +101,24 @@ jobs:
         with:
           name: childdebugger-win32-x64-tests
           path: |
-            ${{ github.workspace }}/build/tests/bin/caller.exe
-            ${{ github.workspace }}/build/tests/bin/caller.pdb
-            ${{ github.workspace }}/build/tests/bin/callee.exe
-            ${{ github.workspace }}/build/tests/bin/callee.pdb
-            ${{ github.workspace }}/build/bin/info.txt
+            ${{ github.workspace }}/build-x64/tests/bin/caller.exe
+            ${{ github.workspace }}/build-x64/tests/bin/caller.pdb
+            ${{ github.workspace }}/build-x64/tests/bin/callee.exe
+            ${{ github.workspace }}/build-x64/tests/bin/callee.pdb
+            ${{ github.workspace }}/build-x86/tests/bin/caller.exe
+            ${{ github.workspace }}/build-x86/tests/bin/caller.pdb
+            ${{ github.workspace }}/build-x86/tests/bin/callee.exe
+            ${{ github.workspace }}/build-x86/tests/bin/callee.pdb
+            ${{ github.workspace }}/build-x64/bin/info.txt
 
       - name: Upload debug symbols
         uses: actions/upload-artifact@v3
         with:
           name: childdebugger-win32-x64-debug-symbols
           path: |
-            ${{ github.workspace }}/build/bin/ChildDebugger.pdb
-            ${{ github.workspace }}/build/bin/info.txt
+            ${{ github.workspace }}/build-x64/bin/ChildDebugger.pdb
+            ${{ github.workspace }}/build-x86/bin/ChildDebugger.pdb
+            ${{ github.workspace }}/build-x64/bin/info.txt
 
   deploy-head:
     name: "Deploy head"

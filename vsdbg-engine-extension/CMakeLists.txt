@@ -6,6 +6,8 @@ project(ChildDebuggerExtension VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 
+option(CHILDDEBUGGER_INSTALL_PDB "Install PDB files with the DLLs" OFF)
+
 find_package(VSDebugEng REQUIRED)
 find_package(VSDebugConfigTool REQUIRED)
 
@@ -42,11 +44,46 @@ configure_vs_debug_extension(
     "${CMAKE_CURRENT_BINARY_DIR}/include"
 )
 
+set(_arch_sub_dir)
+if(MSVC)
+  if("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "X86")
+    set(_arch_sub_dir "x86")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "x64")
+    set(_arch_sub_dir "x64")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "ARMV7")
+    set(_arch_sub_dir "arm")
+  elseif("${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "ARM64")
+    set(_arch_sub_dir "arm64")
+  endif()
+else()
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86|AMD64")
+    if("${CMAKE_SIZEOF_VOID_P}" EQUAL "4")
+      set(_arch_sub_dir "x86")
+    else()
+      set(_arch_sub_dir "x64")
+    endif()
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM64")
+    if("${CMAKE_SIZEOF_VOID_P}" EQUAL "4")
+      set(_arch_sub_dir "arm")
+    else()
+      set(_arch_sub_dir "arm64")
+    endif()
+  endif()
+endif()
+
 install(
   TARGETS
     ChildDebugger
-  RUNTIME DESTINATION bin
+  RUNTIME DESTINATION "bin/${_arch_sub_dir}"
 )
+if(CHILDDEBUGGER_INSTALL_PDB)
+  install(
+    FILES
+      "$<TARGET_PDB_FILE:ChildDebugger>"
+    DESTINATION "bin/${_arch_sub_dir}"
+    OPTIONAL
+  )
+endif()
 
 install(
   FILES

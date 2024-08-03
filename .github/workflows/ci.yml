@@ -30,28 +30,47 @@ jobs:
           cmakeVersion: "~3.25.0"
           ninjaVersion: "^1.11.1"
   
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
-        with:
-          arch: x64
-  
       - name: Install VSDbg Engine Extension Dependencies
         run: |
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
-  
-      - name: Configure VSDbg Engine Extension
+
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+
+      - name: Configure VSDbg Engine Extension (x64)
         run: |
-          mkdir build
-          cd build
+          mkdir build-x64
+          cd build-x64
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
   
-      - name: Build & Install VSDbg Engine Extension
+      - name: Build & Install VSDbg Engine Extension (x64)
         run: |
-          cd build
+          cd build-x64
+          ninja install
+
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x86
+
+      - name: Configure VSDbg Engine Extension (x86)
+        run: |
+          mkdir build-x86
+          cd build-x86
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=Debug `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+  
+      - name: Build & Install VSDbg Engine Extension (x86)
+        run: |
+          cd build-x86
           ninja install
 
       - name: Compile VSCode Test Sources

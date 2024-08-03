@@ -9,13 +9,9 @@
 
 !dist/*.js
 
-!vsdbg-engine-extension/bin/x86/*.dll
-!vsdbg-engine-extension/bin/x86/*.pdb
-!vsdbg-engine-extension/bin/x64/*.dll
-!vsdbg-engine-extension/bin/x64/*.pdb
-!vsdbg-engine-extension/bin/arm/*.dll
-!vsdbg-engine-extension/bin/arm/*.pdb
-!vsdbg-engine-extension/bin/arm64/*.dll
-!vsdbg-engine-extension/bin/arm64/*.pdb
-!vsdbg-engine-extension/bin/*.vsdconfig
-!vsdbg-engine-extension/info.txt
+!vsdbg-engine-extension/bin/x86/ChildDebugger.dll
+!vsdbg-engine-extension/bin/x64/ChildDebugger.dll
+!vsdbg-engine-extension/bin/arm/ChildDebugger.dll
+!vsdbg-engine-extension/bin/arm64/ChildDebugger.dll
+!vsdbg-engine-extension/bin/ChildDebugger.vsdconfig
+!vsdbg-engine-extension/bin/info.txt

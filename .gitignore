@@ -4,4 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 vsdbg-engine-extension/bin/
-build-*/
+build/

@@ -41,17 +41,18 @@ jobs:
 
       - name: Configure VSDbg Engine Extension (x64)
         run: |
-          mkdir build-x64
-          cd build-x64
+          mkdir build/x64
+          cd build/x64
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
   
       - name: Build & Install VSDbg Engine Extension (x64)
         run: |
-          cd build-x64
+          cd build/x64
           ninja install
 
       - uses: TheMrMilchmann/setup-msvc-dev@v2
@@ -60,17 +61,18 @@ jobs:
 
       - name: Configure VSDbg Engine Extension (x86)
         run: |
-          mkdir build-x86
-          cd build-x86
+          mkdir build/x86
+          cd build/x86
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
   
       - name: Build & Install VSDbg Engine Extension (x86)
         run: |
-          cd build-x86
+          cd build/x86
           ninja install
 
       - name: Compile VSCode Test Sources

@@ -563,7 +563,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 }
 
 suite('Auto attach x64', () => {
-	const testExeDirX64 = path.join(__dirname, "..", "..", "..", "build-x64", "tests", "bin");
+	const testExeDirX64 = path.join(__dirname, "..", "..", "..", "vsdbg-engine-extension", "bin", "tests", "x64");
 
 	const callerPathX64 = path.join(testExeDirX64, "caller.exe");
 	const calleePathX64 = path.join(testExeDirX64, "callee.exe");
@@ -572,7 +572,7 @@ suite('Auto attach x64', () => {
 });
 
 suite('Auto attach x86', () => {
-	const testExeDirX86 = path.join(__dirname, "..", "..", "..", "build-x86", "tests", "bin");
+	const testExeDirX86 = path.join(__dirname, "..", "..", "..", "vsdbg-engine-extension", "bin", "tests", "x86");
 
 	const callerPathX86 = path.join(testExeDirX86, "caller.exe");
 	const calleePathX86 = path.join(testExeDirX86, "callee.exe");

@@ -47,17 +47,18 @@ jobs:
   
       - name: Configure VSDbg Engine Extension (x64)
         run: |
-          mkdir build-x64
-          cd build-x64
+          mkdir build/x64
+          cd build/x64
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
   
       - name: Build & Install VSDbg Engine Extension (x64)
         run: |
-          cd build-x64
+          cd build/x64
           ninja install
 
       - uses: TheMrMilchmann/setup-msvc-dev@v2
@@ -66,25 +67,26 @@ jobs:
   
       - name: Configure VSDbg Engine Extension (x86)
         run: |
-          mkdir build-x86
-          cd build-x86
+          mkdir build/x86
+          cd build/x86
           cmake "${{ github.workspace }}\vsdbg-engine-extension" `
           -G Ninja `
           -DCMAKE_BUILD_TYPE=Debug `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension"
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
   
       - name: Build & Install VSDbg Engine Extension (x86)
         run: |
-          cd build-x86
+          cd build/x86
           ninja install
 
       - name: Add build info
         run: |
           "ref:    ${{ github.ref_name }}`n" + `
           "commit: ${{ github.sha }}`n"  + `
-          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/build-x64/bin/info.txt"
-    
+          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt"
+
       - name: Package VSIX
         run: |
           vsce package --target win32-x64 --pre-release
@@ -101,24 +103,24 @@ jobs:
         with:
           name: childdebugger-win32-x64-tests
           path: |
-            ${{ github.workspace }}/build-x64/tests/bin/caller.exe
-            ${{ github.workspace }}/build-x64/tests/bin/caller.pdb
-            ${{ github.workspace }}/build-x64/tests/bin/callee.exe
-            ${{ github.workspace }}/build-x64/tests/bin/callee.pdb
-            ${{ github.workspace }}/build-x86/tests/bin/caller.exe
-            ${{ github.workspace }}/build-x86/tests/bin/caller.pdb
-            ${{ github.workspace }}/build-x86/tests/bin/callee.exe
-            ${{ github.workspace }}/build-x86/tests/bin/callee.pdb
-            ${{ github.workspace }}/build-x64/bin/info.txt
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
 
       - name: Upload debug symbols
         uses: actions/upload-artifact@v3
         with:
           name: childdebugger-win32-x64-debug-symbols
           path: |
-            ${{ github.workspace }}/build-x64/bin/ChildDebugger.pdb
-            ${{ github.workspace }}/build-x86/bin/ChildDebugger.pdb
-            ${{ github.workspace }}/build-x64/bin/info.txt
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/x64/ChildDebugger.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/x86/ChildDebugger.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
 
   deploy-head:
     name: "Deploy head"

@@ -1,11 +1,17 @@
 #pragma once
 
 #include <array>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include <fstream>
+#include <atlbase.h>
+#include <atlcom.h>
+#include <atlctl.h>
+
+#include <vsdebugeng.h>
+#include <vsdebugeng.templates.h>
 
 #include "ChildDebugger.contract.h"
 

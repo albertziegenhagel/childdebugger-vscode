@@ -8,6 +8,9 @@ import * as vscode from 'vscode';
 import { ChildDebuggerConfigurationExtension } from '../../extension';
 // import * as myExtension from '../../extension';
 
+const testUserName = "TestUser";
+const testUserPassword = "Rb4Z7X9d(pf$%*?S=dG@VaMZe";
+
 async function startDebuggingAndWait(configuration: vscode.DebugConfiguration) {
 
 	let startedSessions: vscode.DebugSession[] = [];
@@ -511,54 +514,111 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 
 	}).timeout(100000);
 
-	// test(`Attach once Token (${arch})`, async () => {
-	// 	vscode.window.showInformationMessage(`RUN Attach Token (${arch}).`);
+	if (process.env.CHILDDEBUGGER_TEST_IS_ADMIN === "1") {
 
-	// 	const result = await startDebuggingAndWait({
-	// 		type: "cppvsdbg",
-	// 		name: "Parent Session",
-	// 		request: "launch",
-	// 		program: callerPath,
-	// 		args: [
-	// 			"--init-time", "0",
-	// 			"--final-time", "0",
-	// 			"--method", "token",
-	// 			"--wait",
-	// 			calleePath,
-	// 			"-",
-	// 			"--sleep-time", "0"
-	// 		],
-	// 		"console": "internalConsole",
-	// 	});
+		test(`Attach once Token (${arch})`, async () => {
+			vscode.window.showInformationMessage(`RUN Attach Token (${arch}).`);
 
-	// 	assert.strictEqual(result.startedSessions.length, 2);
+			const result = await startDebuggingAndWait({
+				type: "cppvsdbg",
+				name: "Parent Session",
+				request: "launch",
+				program: callerPath,
+				args: [
+					"--init-time", "0",
+					"--final-time", "0",
+					"--method", "token",
+					"--wait",
+					calleePath,
+					"-",
+					"--sleep-time", "0"
+				],
+				"console": "internalConsole",
+			});
 
-	// 	assert.strictEqual(result.startedSessions[0].name, "Parent Session");
+			assert.strictEqual(result.startedSessions.length, 2);
 
-	// 	const childSession = result.startedSessions[1];
-	// 	assert.isTrue('childDebuggerExtension' in childSession.configuration);
+			assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
-	// 	const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+			const childSession = result.startedSessions[1];
+			assert.isTrue('childDebuggerExtension' in childSession.configuration);
 
-	// 	assert.isTrue(debuggerConfigExtension.childSuspended);
-	// 	assert.isTrue(debuggerConfigExtension.parentSuspended);
+			const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
 
-	// 	const cpid = debuggerConfigExtension.childProcessId;
-	// 	const ctid = debuggerConfigExtension.childThreadId;
-	// 	const ppid = debuggerConfigExtension.parentProcessId;
+			assert.isTrue(debuggerConfigExtension.childSuspended);
+			assert.isTrue(debuggerConfigExtension.parentSuspended);
 
-	// 	assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
+			const cpid = debuggerConfigExtension.childProcessId;
+			const ctid = debuggerConfigExtension.childThreadId;
+			const ppid = debuggerConfigExtension.parentProcessId;
 
-	// 	assert.strictEqual(result.output,
-	// 		`  CALLER (${ppid}): initialized\r\n` +
-	// 		`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-	// 		`  CALLER (${ppid}): wait for child\r\n` +
-	// 		`  CALLEE (${cpid}): initialized\r\n` +
-	// 		`  CALLEE (${cpid}): terminating\r\n` +
-	// 		`  CALLER (${ppid}): terminating\r\n`
-	// 	);
+			assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
-	// }).timeout(100000);
+			assert.strictEqual(result.output,
+				`  CALLER (${ppid}): initialized\r\n` +
+				`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+				`  CALLER (${ppid}): wait for child\r\n` +
+				`  CALLEE (${cpid}): initialized\r\n` +
+				`  CALLEE (${cpid}): terminating\r\n` +
+				`  CALLER (${ppid}): terminating\r\n`
+			);
+
+		}).timeout(100000);
+
+		if (process.env.CHILDDEBUGGER_TEST_HAS_TEST_USER === "1") {
+
+			test(`Attach once Logon (${arch})`, async () => {
+				vscode.window.showInformationMessage(`RUN Attach logon (${arch}).`);
+
+				const result = await startDebuggingAndWait({
+					type: "cppvsdbg",
+					name: "Parent Session",
+					request: "launch",
+					program: callerPath,
+					args: [
+						"--init-time", "0",
+						"--final-time", "0",
+						"--method", "logon",
+						"--user-name", testUserName,
+						"--user-password", testUserPassword,
+						"--wait",
+						calleePath,
+						"-",
+						"--sleep-time", "0"
+					],
+					"console": "internalConsole",
+				});
+
+				assert.strictEqual(result.startedSessions.length, 2);
+
+				assert.strictEqual(result.startedSessions[0].name, "Parent Session");
+
+				const childSession = result.startedSessions[1];
+				assert.isTrue('childDebuggerExtension' in childSession.configuration);
+
+				const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+
+				assert.isTrue(debuggerConfigExtension.childSuspended);
+				assert.isTrue(debuggerConfigExtension.parentSuspended);
+
+				const cpid = debuggerConfigExtension.childProcessId;
+				const ctid = debuggerConfigExtension.childThreadId;
+				const ppid = debuggerConfigExtension.parentProcessId;
+
+				assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
+
+				assert.strictEqual(result.output,
+					`  CALLER (${ppid}): initialized\r\n` +
+					`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+					`  CALLER (${ppid}): wait for child\r\n` +
+					`  CALLEE (${cpid}): initialized\r\n` +
+					`  CALLEE (${cpid}): terminating\r\n` +
+					`  CALLER (${ppid}): terminating\r\n`
+				);
+
+			}).timeout(100000);
+		}
+	}
 
 }
 

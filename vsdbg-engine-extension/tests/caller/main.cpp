@@ -347,6 +347,59 @@ std::optional<std::wstring> make_command_line(const Options& opts)
     return command_line;
 }
 
+auto create_output_pipes()
+{
+    SECURITY_ATTRIBUTES security_attributes  = {sizeof(SECURITY_ATTRIBUTES)};
+    security_attributes.bInheritHandle       = TRUE;
+    security_attributes.lpSecurityDescriptor = nullptr;
+
+    HANDLE out_read;
+    HANDLE out_write;
+    HANDLE err_read;
+    HANDLE err_write;
+
+    if(CreatePipe(&out_read, &out_write, &security_attributes, 0) == FALSE)
+    {
+        std::wcout << L"Failed to create out pipe." << std::endl;
+        std::quick_exit(EXIT_FAILURE);
+    }
+    if(CreatePipe(&err_read, &err_write, &security_attributes, 0) == FALSE)
+    {
+        std::wcout << L"Failed to create err pipe." << std::endl;
+        std::quick_exit(EXIT_FAILURE);
+    }
+
+    return std::make_tuple(out_read, out_write, err_read, err_write);
+}
+
+void start_forward_output_thread(HANDLE out_read, HANDLE err_read)
+{
+    std::thread forward_output_thread(
+        [out_read, err_read]()
+        {
+            auto* const stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+            auto* const stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
+
+            std::array<std::byte, 128> buffer;
+
+            DWORD read    = 0;
+            DWORD written = 0;
+            while(true)
+            {
+                while(ReadFile(out_read, buffer.data(), buffer.size(), &read, nullptr) == TRUE)
+                {
+                    WriteFile(stdout_handle, buffer.data(), read, &written, nullptr);
+                }
+                while(ReadFile(err_read, buffer.data(), buffer.size(), &read, nullptr) == TRUE)
+                {
+                    WriteFile(stderr_handle, buffer.data(), read, &written, nullptr);
+                }
+            }
+        });
+
+    forward_output_thread.detach();
+}
+
 DWORD run_create_process(const Options&       opts,
                          PROCESS_INFORMATION& process_info)
 {
@@ -464,18 +517,28 @@ DWORD run_create_process(const Options&       opts,
             std::quick_exit(EXIT_FAILURE);
         }
 
+        const auto [out_read, out_write, err_read, err_write] = create_output_pipes();
+
         STARTUPINFOW info = {sizeof(info)};
+        info.hStdOutput   = out_write;
+        info.hStdError    = err_write;
+        info.dwFlags      = STARTF_USESTDHANDLES;
 
         const auto result = CreateProcessWithTokenW(
             token_duplicate,
             0,
             opts.no_app_name ? nullptr : opts.child_path.c_str(),
             command_line ? command_line->data() : nullptr,
-            creation_flags,
+            creation_flags | CREATE_NO_WINDOW,
             nullptr,
             nullptr,
             &info,
             &process_info);
+
+        if(result == TRUE)
+        {
+            start_forward_output_thread(out_read, err_read);
+        }
 
         CloseHandle(token_duplicate);
         CloseHandle(token);
@@ -485,21 +548,32 @@ DWORD run_create_process(const Options&       opts,
     break;
     case CreateProcessMethod::logon:
     {
-        const DWORD  logon_flags = 0;
-        STARTUPINFOW info        = {sizeof(info)};
+        const auto [out_read, out_write, err_read, err_write] = create_output_pipes();
 
-        return CreateProcessWithLogonW(
+        STARTUPINFOW info = {sizeof(info)};
+        info.hStdOutput   = out_write;
+        info.hStdError    = err_write;
+        info.dwFlags      = STARTF_USESTDHANDLES;
+
+        const auto result = CreateProcessWithLogonW(
             opts.user_name ? opts.user_name->c_str() : nullptr,
             opts.user_domain ? opts.user_domain->c_str() : nullptr,
             opts.user_password ? opts.user_password->c_str() : nullptr,
-            logon_flags,
+            0,
             opts.no_app_name ? nullptr : opts.child_path.c_str(),
             command_line ? command_line->data() : nullptr,
-            creation_flags,
+            creation_flags | CREATE_NO_WINDOW,
             nullptr,
             nullptr,
             &info,
             &process_info);
+
+        if(result == TRUE)
+        {
+            start_forward_output_thread(out_read, err_read);
+        }
+
+        return result;
     }
     break;
     default:

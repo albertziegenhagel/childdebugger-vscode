@@ -16,10 +16,10 @@
 
 #include "nlohmann/json.hpp"
 
-#include "CreateFunctionFrames.hpp"
 #include "CreateFunctionType.hpp"
 #include "CustomMessageType.hpp"
 #include "DataItems.hpp"
+#include "FunctionCallContext.hpp"
 #include "SystemUtils.hpp"
 #include "UnicodeUtils.hpp"
 
@@ -124,32 +124,82 @@ bool check_attach_to_process(
     return settings.attach_others;
 }
 
-template<typename StackType>
-HRESULT handle_call_to_create_process(
-    const ChildDebuggerSettings& settings,
-    std::ofstream&               log_file,
-    DkmThread*                   thread,
-    const CONTEXT&               context,
-    bool                         is_unicode)
+template<typename FunctionSignature>
+HRESULT load_function_context(std::ofstream&                               log_file,
+                              DkmThread&                                   thread,
+                              BasicFunctionCallContext<FunctionSignature>& context)
 {
-    const auto stack_pointer = get_stack_pointer(context);
-    // The other function arguments are passed on the stack, hence we need to extract it.
-    // Assuming x64 calling conventions, the pointer to the stack frame is stored in the
-    // RSP register.
-    StackType  stack;
-    if(thread->Process()->ReadMemory(stack_pointer, DkmReadMemoryFlags::None, &stack, sizeof(StackType), nullptr) != S_OK)
+    const UINT32 context_flags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
+    if(thread.GetContext(context_flags, &context.registers, sizeof(context.registers)) != S_OK)
+    {
+        log_file << "  FAILED to retrieve thread register context.\n";
+        log_file.flush();
+        return S_FALSE;
+    }
+
+    const auto stack_pointer = get_stack_pointer(context.registers);
+
+    if(thread.Process()->ReadMemory(stack_pointer, DkmReadMemoryFlags::None, context.stack.data(), context.stack.size(), nullptr) != S_OK)
     {
         log_file << "  FAILED to read stack.\n";
         log_file.flush();
         return S_FALSE;
     }
-    log_file << "  dwCreationFlags=" << stack.dwCreationFlags << "\n";
+
+    return S_OK;
+}
+
+template<typename FunctionSignature>
+HRESULT store_function_context(std::ofstream&                               log_file,
+                               DkmThread&                                   thread,
+                               BasicFunctionCallContext<FunctionSignature>& context)
+{
+    if(context.registers_changed)
+    {
+        CAutoDkmArray<BYTE> register_bytes;
+        DkmAllocArray(sizeof(context.registers), &register_bytes);
+        std::memcpy(register_bytes.Members, &context.registers, sizeof(context.registers));
+        if(thread.SetContext(register_bytes) != S_OK)
+        {
+            log_file << "  FAILED to write thread register context.\n";
+            log_file.flush();
+            return S_FALSE;
+        }
+    }
+
+    if(context.stack_changed)
+    {
+        const auto stack_pointer = get_stack_pointer(context.registers);
+
+        CAutoDkmArray<BYTE> stack_bytes;
+        DkmAllocArray(context.stack.size(), &stack_bytes);
+        std::memcpy(stack_bytes.Members, context.stack.data(), context.stack.size());
+        if(thread.Process()->WriteMemory(stack_pointer, stack_bytes) != S_OK)
+        {
+            log_file << "  FAILED to write stack memory.\n";
+            log_file.flush();
+            return S_FALSE;
+        }
+    }
+
+    return S_OK;
+}
+
+template<typename FunctionContextType>
+HRESULT handle_call_to_create_process(
+    const ChildDebuggerSettings& settings,
+    std::ofstream&               log_file,
+    DkmThread&                   thread,
+    bool                         is_unicode)
+{
+    FunctionContextType function_call_context;
+    load_function_context(log_file, thread, function_call_context);
 
     // Extract the application name from the passed arguments.
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
     // RCX register for `CreateProcessA` and `CreateProcessW`.
     CComPtr<DkmString> application_name;
-    if(read_string_from_memory_at(thread->Process(), stack.get_lpApplicationName(context), is_unicode, application_name) != S_OK)
+    if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpApplicationName(), is_unicode, application_name) != S_OK)
     {
         log_file << "  FAILED to read application name argument.\n";
         log_file.flush();
@@ -165,7 +215,7 @@ HRESULT handle_call_to_create_process(
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
     // RDX register for `CreateProcessA` and `CreateProcessW`.
     CComPtr<DkmString> command_line;
-    if(read_string_from_memory_at(thread->Process(), stack.get_lpCommandLine(context), is_unicode, command_line) != S_OK)
+    if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpCommandLine(), is_unicode, command_line) != S_OK)
     {
         log_file << "  FAILED to read command line argument.\n";
         log_file.flush();
@@ -179,28 +229,21 @@ HRESULT handle_call_to_create_process(
 
     if(!check_attach_to_process(settings, log_file, application_name, command_line)) return S_OK;
 
+    const auto creation_flags = function_call_context.get_dwCreationFlags();
+    log_file << "  dwCreationFlags=" << creation_flags << "\n";
+
     // If want to suspend the child process and it is not already requested to be suspended
     // originally, we enforce a suspended process creation.
     bool forced_suspension = false;
-    if((stack.dwCreationFlags & CREATE_SUSPENDED) != 0)
+    if((creation_flags & CREATE_SUSPENDED) != 0)
     {
         log_file << "  Originally requested suspended start\n";
         log_file.flush();
     }
     else if(settings.suspend_children)
     {
-        forced_suspension      = true;
-        const UINT32 new_flags = stack.dwCreationFlags | CREATE_SUSPENDED;
-
-        CAutoDkmArray<BYTE> new_flags_bytes;
-        DkmAllocArray(sizeof(stack.dwCreationFlags), &new_flags_bytes);
-        memcpy(new_flags_bytes.Members, &new_flags, sizeof(stack.dwCreationFlags));
-        if(thread->Process()->WriteMemory(stack_pointer + offsetof(StackType, dwCreationFlags), new_flags_bytes) != S_OK)
-        {
-            log_file << "  FAILED to force suspended start.\n";
-            log_file.flush();
-            return S_FALSE;
-        }
+        function_call_context.set_dwCreationFlags(creation_flags | CREATE_SUSPENDED);
+        forced_suspension = true;
         log_file << "  Force suspended start\n";
         log_file.flush();
     }
@@ -210,19 +253,10 @@ HRESULT handle_call_to_create_process(
         log_file.flush();
     }
 
-    // Now, retrieve the return address for this function call.
-    // UINT64 return_address;
-    // UINT64 frame_base;
-    // UINT64 vframe;
-    // if(thread->GetCurrentFrameInfo(&return_address, &frame_base, &vframe) != S_OK)
-    // {
-    //     log_file << "  FAILED to retrieve function return address.\n";
-    //     log_file.flush();
-    //     return S_FALSE;
-    // }
+    store_function_context(log_file, thread, function_call_context);
 
     CComPtr<DkmInstructionAddress> address;
-    if(thread->Process()->CreateNativeInstructionAddress(stack.get_return_address(context), &address) != S_OK)
+    if(thread.Process()->CreateNativeInstructionAddress(function_call_context.get_return_address(), &address) != S_OK)
     {
         log_file << "  FAILED to create native instruction address from function return address.\n";
         log_file.flush();
@@ -231,7 +265,7 @@ HRESULT handle_call_to_create_process(
 
     // Create a new breakpoint to be triggered when the child process creation is done.
     CComPtr<CreateOutInfo> out_info;
-    out_info.Attach(new CreateOutInfo(stack.get_lpProcessInformation(context), forced_suspension));
+    out_info.Attach(new CreateOutInfo(function_call_context.get_lpProcessInformation(), forced_suspension));
 
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
     if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
@@ -539,29 +573,17 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         log_file_ << "  In PID " << thread->Process()->LivePart()->Id << ": Start CreateProcess: W " << in_info->get_is_unicode() << " Func " << (int)in_info->get_function_type() << "\n";
         log_file_.flush();
 
-        // Retrieve the current register values, required to extract function call arguments.
-        CONTEXT      context;
-        const UINT32 context_flags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
-        if(thread->GetContext(context_flags, &context, sizeof(CONTEXT)) != S_OK)
+        switch(in_info->get_function_type())
         {
-            log_file_ << "  FAILED to retrieve thread context.\n";
+        case CreateFunctionType::create_process:
+            return handle_call_to_create_process<CreateProcessFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+        case CreateFunctionType::create_process_as_user:
+            return handle_call_to_create_process<CreateProcessAsUserFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+        default:
+            log_file_ << "  Unsupported create function type: " << ((int)in_info->get_function_type()) << ".\n";
             log_file_.flush();
             return S_FALSE;
         }
-
-        // FIXME: support remaining creation functions `CreateProcessWithToken` and `CreateProcessWithLogon`.
-        if(in_info->get_function_type() == CreateFunctionType::create_process)
-        {
-            return handle_call_to_create_process<CreateProcessStack>(settings_, log_file_, thread, context, static_cast<unsigned int>(in_info->get_is_unicode()) != 0U);
-        }
-        if(in_info->get_function_type() == CreateFunctionType::create_process_as_user)
-        {
-            return handle_call_to_create_process<CreateProcessAsUserStack>(settings_, log_file_, thread, context, in_info->get_is_unicode());
-        }
-
-        log_file_ << "  Unsupported create function type: " << ((int)in_info->get_function_type()) << ".\n";
-        log_file_.flush();
-        return S_FALSE;
     }
 
     CComPtr<CreateOutInfo> out_info;

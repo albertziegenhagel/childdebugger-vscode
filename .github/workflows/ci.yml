@@ -14,6 +14,11 @@ jobs:
         with:
           node-version: 16
 
+      - name: Create Test User
+        run: |
+          $PW = "Rb4Z7X9d(pf$%*?S=dG@VaMZe" | ConvertTo-SecureString  -AsPlainText -Force
+          New-LocalUser -Name "TestUser" -Password $PW
+
       - name: Install NPM Dependencies
         run: npm install
 
@@ -75,8 +80,19 @@ jobs:
           cd build/x86
           ninja install
 
+      - name: Give Test User Access To Test Executables
+        run: |
+          $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("TestUser","ReadAndExecute","Allow")
+          $files = Get-ChildItem -Recurse build\*\tests\bin\*.exe
+          $acls = $files | Get-ACL
+          $acls | ForEach-Object { $_.AddAccessRule($accessRule); }
+          $acls | ForEach-Object { $_ | Set-ACL -Path $_.Path; }
+
       - name: Compile VSCode Test Sources
         run: npm run pretest
 
       - name: Run VSCode unit tests
-        run: npm run test
+        run: |
+          $env:CHILDDEBUGGER_TEST_IS_ADMIN = "1"
+          $env:CHILDDEBUGGER_TEST_HAS_TEST_USER = "1"
+          npm run test

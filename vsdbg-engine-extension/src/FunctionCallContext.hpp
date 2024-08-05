@@ -369,3 +369,33 @@ using CreateProcessAsUserFunctionCallContext = ProcessCreationFunctionCallContex
                       std::uintptr_t           // lpProcessInformation
                       >,
     1, 2, 6, 10>;
+
+using CreateProcessWithTokenFunctionCallContext = ProcessCreationFunctionCallContext<
+    FunctionSignature</*BOOL*/ int,
+                      std::uintptr_t,          // hToken,
+                      std::uintptr_t,          // dwLogonFlags,
+                      std::uintptr_t,          // lpApplicationName,
+                      std::uintptr_t,          // lpCommandLine,
+                      /*DWORD*/ unsigned long, // dwCreationFlags,
+                      std::uintptr_t,          // lpEnvironment,
+                      std::uintptr_t,          // lpCurrentDirectory,
+                      std::uintptr_t,          // lpStartupInfo,
+                      std::uintptr_t           // lpProcessInformation
+                      >,
+    2, 3, 4, 8>;
+
+using CreateProcessWithLogonFunctionCallContext = ProcessCreationFunctionCallContext<
+    FunctionSignature</*BOOL*/ int,
+                      std::uintptr_t,          // lpUsername,
+                      std::uintptr_t,          // lpDomain,
+                      std::uintptr_t,          // lpPassword,
+                      /*DWORD*/ unsigned long, // dwLogonFlags,
+                      std::uintptr_t,          // lpApplicationName,
+                      std::uintptr_t,          // lpCommandLine,
+                      /*DWORD*/ unsigned long, // dwCreationFlags,
+                      std::uintptr_t,          // lpEnvironment,
+                      std::uintptr_t,          // lpCurrentDirectory,
+                      std::uintptr_t,          // lpStartupInfo,
+                      std::uintptr_t           // lpProcessInformation
+                      >,
+    4, 5, 6, 10>;

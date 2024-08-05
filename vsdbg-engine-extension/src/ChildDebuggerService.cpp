@@ -579,6 +579,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
             return handle_call_to_create_process<CreateProcessFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
         case CreateFunctionType::create_process_as_user:
             return handle_call_to_create_process<CreateProcessAsUserFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+        case CreateFunctionType::create_process_with_token:
+            return handle_call_to_create_process<CreateProcessWithTokenFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+        case CreateFunctionType::create_process_with_logon:
+            return handle_call_to_create_process<CreateProcessWithLogonFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
         default:
             log_file_ << "  Unsupported create function type: " << ((int)in_info->get_function_type()) << ".\n";
             log_file_.flush();

@@ -11,10 +11,11 @@ interface EngineProcessConfig {
 	attach: boolean,
 }
 interface EngineSettings {
-	enabled: boolean,
 	suspendChildren: boolean,
 	suspendParents: boolean,
 	skipInitialBreakpoint: boolean,
+
+	attachAny: boolean,
 
 	processConfigs: EngineProcessConfig[],
 	attachOthers: boolean
@@ -117,13 +118,18 @@ export function activate(context: vscode.ExtensionContext) {
 						name: `${name} #${childProcessId}`,
 						request: "attach",
 						processId: childProcessId,
-						childDebuggerExtension: configurationExtension,
-						// symbolOptions: {
-						// 	searchMicrosoftSymbolServer: true,
-						// 	moduleFilter: {
-						// 		mode: "loadAllButExcluded",
-						// 	}
-						// }
+						// NOTE: we exploit the fact that we can attach any additional configuration
+						//       to the debug session. This additional information carries data about the
+						//       child and parent processes and is used to identify child process session
+						//       in the `onDidStartDebugSession` handler.
+						//       This is more of a HACK, since the additional configuration is actually
+						//       transferred to the debug adapter, but so far the `cppvsdbg` adapter seems
+						//       to simply ignore it and everything works fine.
+						_childDebuggerExtension: configurationExtension,
+						// always attach to children of children
+						autoAttachChildProcess: true,
+						// TODO: should we copy other configuration properties (like `symbolOptions`)
+						//       from the parent to the child?
 					};
 					const options: vscode.DebugSessionOptions = {
 						parentSession: session,
@@ -134,7 +140,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 					// Now, start attaching to the child process.
 					outputChannel.appendLine(`Attempting attach to child process ${childProcessId}`);
-					vscode.debug.startDebugging(undefined, configuration, options).then(() => {
+					vscode.debug.startDebugging(session.workspaceFolder, configuration, options).then(() => {
 						// outputChannel.appendLine(`  attach: succeeded`);
 					}, (reason) => {
 						outputChannel.appendLine(`  attach to ${childProcessId}: failed: "${reason}"`);
@@ -145,12 +151,12 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	vscode.debug.onDidStartDebugSession(async (session: vscode.DebugSession) => {
-		const configuration = vscode.workspace.getConfiguration("childDebugger");
-		if (configuration === null || configuration === undefined) {
+		const globalConfiguration = vscode.workspace.getConfiguration("childDebugger");
+		if (globalConfiguration === null || globalConfiguration === undefined) {
 			return;
 		}
 
-		if (!configuration.get<boolean>("enabled", true)) {
+		if (!globalConfiguration.get<boolean>("enabled", true)) {
 			return;
 		}
 
@@ -160,7 +166,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Build settings to be send to the new debug session.
 		var processConfigs: EngineProcessConfig[] = [];
-		for (const entry of configuration.get<any[]>("filter.childProcesses", [])) {
+		for (const entry of globalConfiguration.get<any[]>("filter.childProcesses", [])) {
 			processConfigs.push({
 				applicationName: entry['applicationName'],
 				commandLine: entry['commandLine'],
@@ -169,15 +175,15 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		const engineSettings: EngineSettings = {
-			enabled: configuration.get<boolean>("enabled", true),
+			suspendChildren: globalConfiguration.get<boolean>("general.suspendChildren", true),
+			suspendParents: globalConfiguration.get<boolean>("general.suspendParents", true),
 
-			suspendChildren: configuration.get<boolean>("general.suspendChildren", true),
-			suspendParents: configuration.get<boolean>("general.suspendParents", true),
+			skipInitialBreakpoint: globalConfiguration.get<boolean>("general.skipInitialBreakpoint", true),
 
-			skipInitialBreakpoint: configuration.get<boolean>("general.skipInitialBreakpoint", true),
+			attachAny: session.configuration.autoAttachChildProcess === true,
 
 			processConfigs: processConfigs,
-			attachOthers: configuration.get<boolean>("filter.attachOtherChildren", true),
+			attachOthers: globalConfiguration.get<boolean>("filter.attachOtherChildren", true),
 		};
 
 		// Send the settings to the debug engine extension in the new session.
@@ -199,10 +205,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// If this is not a debug session that we started for a child process,
 		// there is nothing else we need to do.
-		if (!('childDebuggerExtension' in session.configuration)) {
+		if (!('_childDebuggerExtension' in session.configuration)) {
 			return;
 		}
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = session.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = session.configuration._childDebuggerExtension;
 
 		// If the child was suspended, send a request to resume it.
 		// If it was not suspended by us, but we still want to skip over the initial breakpoint,

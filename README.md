@@ -1,6 +1,6 @@
 # Child Process Debugger for VS Code
 
-A VS Code extension to support (Windows) child process debugging in Visual Studio Code via the `cppvsdbg` Debug Adapter. If installed, it will automatically attach a debugger to all child processes spawned by any process that is currently being debugged.
+A VS Code extension to support (Windows) child process debugging in Visual Studio Code via the `cppvsdbg` Debug Adapter. If installed, adding `"autoAttachChildProcess": true` to your debug launch configuration will make VS Code automatically attach a debugger to all child processes spawned by any process that is currently being debugged.
 
 It is intended to be the VS Code equivalent of the [Microsoft Child Process Debugging Power Tool](https://marketplace.visualstudio.com/items?itemName=vsdbgplat.MicrosoftChildProcessDebuggingPowerTool2022).
 
@@ -16,6 +16,10 @@ It is intended to be the VS Code equivalent of the [Microsoft Child Process Debu
   - it does not proceed and generates some unexpected behavior (e.g. a parent process that original creates a suspended child process could resume it before we had a change to attach the debugger).
 - Recursively attaches to child processes of child processes.
 - Filtering of processes to attach to by the executable name or the command line they are invoked with.
+
+## Limitations
+
+- Only supports the `cppvsdbg` Debug Adapter on Windows. Other platforms or debug adapters are not supported.
 
 ## Installation
 
@@ -41,6 +45,21 @@ Loading extensions from 'C:\Users\[User]\.vscode\extensions\albertziegenhagel-ch
 ```
 
 in the beginning of the `DEBUG CONSOLE` output view when debugging any native application through the C++ `cppvsdbg` debugger.
+
+## Usage
+
+By default, child processes debugging is disabled to make the impact of this extension on the usual debugging experience as small as possible. To enable it, you have to add `"autoAttachChildProcess": true` to the debug configuration in your `launch.json`. E.g. this could look like this:
+
+```json
+{
+    "name": "Debug With Child Processes",
+    "type": "cppvsdbg",
+    "request": "launch",
+    "program": "C:\\Path\\To\\My\\Executable.exe",
+    "cwd": "${workspaceRoot}",
+    "autoAttachChildProcess": true,
+},
+```
 
 ## Dependencies
 

@@ -35,7 +35,7 @@
             "order": 0,
             "type": "boolean",
             "default": true,
-            "description": "Enable/disable debugging child processes."
+            "description": "If false, debugging child processes is completely disabled."
           },
           "childDebugger.general.suspendChildren": {
             "order": 1,
@@ -82,6 +82,33 @@
             "type": "boolean",
             "default": true,
             "description": "Whether to attach to any processes that did not match any of the explicit child process filters."
+          }
+        }
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "cppvsdbg",
+        "configurationAttributes": {
+          "launch": {
+            "type": "object",
+            "properties": {
+              "autoAttachChildProcess": {
+                "type": "boolean",
+                "description": "Optional parameter. If true, the debugger will automatically (and recursively) attach to child processes of the target process. This is subject to global child process debugging settings which can completely disable child process debugging or specify filters on which processes to attach to.",
+                "default": false
+              }
+            }
+          },
+          "attach": {
+            "type": "object",
+            "properties": {
+              "autoAttachChildProcess": {
+                "type": "boolean",
+                "description": "Optional parameter. If true, the debugger will automatically (and recursively) attach to child processes of the target process. This is subject to global child process debugging settings which can completely disable child process debugging or specify filters on which processes to attach to.",
+                "default": false
+              }
+            }
           }
         }
       }

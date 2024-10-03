@@ -81,16 +81,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 		assert.strictEqual(result.startedSessions.length, 2);
 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -112,6 +113,53 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 
 	}).timeout(100000);
 
+	test(`No attach (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN No attach (${arch}).`);
+
+		const result = await startDebuggingAndWait({
+			type: "cppvsdbg",
+			name: "Parent Session",
+			request: "launch",
+			program: callerPath,
+			args: [
+				"--init-time", "0",
+				"--final-time", "0",
+				"--wait",
+				calleePath,
+				"-",
+				"--sleep-time", "0"
+			],
+			console: "internalConsole"
+		});
+		assert.strictEqual(result.startedSessions.length, 1);
+
+		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
+	}).timeout(100000);
+
+	test(`Disabled attach (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Disabled attach (${arch}).`);
+
+		const result = await startDebuggingAndWait({
+			type: "cppvsdbg",
+			name: "Parent Session",
+			request: "launch",
+			program: callerPath,
+			args: [
+				"--init-time", "0",
+				"--final-time", "0",
+				"--wait",
+				calleePath,
+				"-",
+				"--sleep-time", "0"
+			],
+			console: "internalConsole",
+			autoAttachChildProcess: false,
+		});
+		assert.strictEqual(result.startedSessions.length, 1);
+
+		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
+	}).timeout(100000);
+
 	test(`Attach non existent (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN non existent (${arch}).`);
 
@@ -128,7 +176,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 1);
@@ -160,8 +209,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
-			// "console": "integratedTerminal",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		// console.log(JSON.stringify(sessions));
@@ -171,11 +220,11 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession1 = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession1.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession1.configuration);
 		const childSession2 = result.startedSessions[2];
-		assert.isTrue('childDebuggerExtension' in childSession2.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession2.configuration);
 
-		const debuggerConfigExtension1: ChildDebuggerConfigurationExtension = childSession1.configuration.childDebuggerExtension;
+		const debuggerConfigExtension1: ChildDebuggerConfigurationExtension = childSession1.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension1.childSuspended);
 		assert.isTrue(debuggerConfigExtension1.parentSuspended);
@@ -186,7 +235,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 
 		assert.strictEqual(childSession1.name, `caller.exe #${cpid1}`);
 
-		const debuggerConfigExtension2: ChildDebuggerConfigurationExtension = childSession2.configuration.childDebuggerExtension;
+		const debuggerConfigExtension2: ChildDebuggerConfigurationExtension = childSession2.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension2.childSuspended);
 		assert.isTrue(debuggerConfigExtension2.parentSuspended);
@@ -234,7 +283,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -242,9 +292,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isFalse(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -284,7 +334,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -292,9 +343,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -333,7 +384,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -341,9 +393,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -383,7 +435,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -391,9 +444,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -432,7 +485,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -440,9 +494,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -482,7 +536,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				"-",
 				"--sleep-time", "0"
 			],
-			"console": "internalConsole",
+			console: "internalConsole",
+			autoAttachChildProcess: true,
 		});
 
 		assert.strictEqual(result.startedSessions.length, 2);
@@ -490,9 +545,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 		const childSession = result.startedSessions[1];
-		assert.isTrue('childDebuggerExtension' in childSession.configuration);
+		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 		assert.isTrue(debuggerConfigExtension.childSuspended);
 		assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -533,7 +588,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 					"-",
 					"--sleep-time", "0"
 				],
-				"console": "internalConsole",
+				console: "internalConsole",
+				autoAttachChildProcess: true,
 			});
 
 			assert.strictEqual(result.startedSessions.length, 2);
@@ -541,9 +597,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 			const childSession = result.startedSessions[1];
-			assert.isTrue('childDebuggerExtension' in childSession.configuration);
+			assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-			const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+			const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 			assert.isTrue(debuggerConfigExtension.childSuspended);
 			assert.isTrue(debuggerConfigExtension.parentSuspended);
@@ -586,7 +642,8 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 						"-",
 						"--sleep-time", "0"
 					],
-					"console": "internalConsole",
+					console: "internalConsole",
+					autoAttachChildProcess: true,
 				});
 
 				assert.strictEqual(result.startedSessions.length, 2);
@@ -594,9 +651,9 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				assert.strictEqual(result.startedSessions[0].name, "Parent Session");
 
 				const childSession = result.startedSessions[1];
-				assert.isTrue('childDebuggerExtension' in childSession.configuration);
+				assert.isTrue('_childDebuggerExtension' in childSession.configuration);
 
-				const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration.childDebuggerExtension;
+				const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 
 				assert.isTrue(debuggerConfigExtension.childSuspended);
 				assert.isTrue(debuggerConfigExtension.parentSuspended);

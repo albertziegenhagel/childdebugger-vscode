@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -14,6 +13,8 @@
 #include <vsdebugeng.templates.h>
 
 #include "ChildDebugger.contract.h"
+
+#include "Logger.hpp"
 
 struct ProcessConfig
 {
@@ -81,7 +82,8 @@ private:
     bool enabled_ = false;
 
     ChildDebuggerSettings settings_;
-    std::ofstream         log_file_;
+
+    Logger logger_;
 
     std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> create_process_function_names_;
 };

@@ -36,6 +36,9 @@ The following cache variables may also be set:
 
 #]=======================================================================]
 
+include(CMakeFindDependencyMacro)
+find_dependency(NETFXSDK)
+
 find_path(VSDebugEng_INCLUDE_DIR
   NAMES
     VSDebugEng.h
@@ -92,14 +95,18 @@ find_package_handle_standard_args(VSDebugEng
 if(VSDebugEng_FOUND)
   set(VSDebugEng_LIBRARIES ${VSDebugEng_LIBRARY})
   set(VSDebugEng_INCLUDE_DIRS ${VSDebugEng_INCLUDE_DIR})
-  set(VSDebugEng_DEFINITIONS ${PC_VSDebugEng_CFLAGS_OTHER})
 endif()
 
 if(VSDebugEng_FOUND AND NOT TARGET VSDebugEng::VSDebugEng)
   add_library(VSDebugEng::VSDebugEng UNKNOWN IMPORTED)
   set_target_properties(VSDebugEng::VSDebugEng PROPERTIES
     IMPORTED_LOCATION "${VSDebugEng_LIBRARY}"
-    INTERFACE_COMPILE_OPTIONS "${PC_VSDebugEng_CFLAGS_OTHER}"
     INTERFACE_INCLUDE_DIRECTORIES "${VSDebugEng_INCLUDE_DIR}"
   )
+  if(NETFXSDK_FOUND)
+    target_link_libraries(VSDebugEng::VSDebugEng
+      INTERFACE
+        NETFXSDK::NETFXSDK
+    )
+  endif()
 endif()

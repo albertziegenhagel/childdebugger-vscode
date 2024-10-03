@@ -24,12 +24,12 @@ struct ProcessConfig
 
 struct ChildDebuggerSettings
 {
-    bool enabled = false;
-
     bool suspend_children = true;
     bool suspend_parents  = true;
 
     bool skip_initial_breakpoint = true;
+
+    bool attach_any = true;
 
     std::vector<ProcessConfig> process_configs;
     bool                       attach_others = true;
@@ -76,8 +76,13 @@ public:
         _In_ Microsoft::VisualStudio::Debugger::DkmEventDescriptorS* event_descriptor) override;
 
 private:
-    ChildDebuggerSettings                                                settings_;
-    std::ofstream                                                        log_file_;
+    // By default, this extension is dormant and does nothing.
+    // Only when we received valid settings, it will be enabled.
+    bool enabled_ = false;
+
+    ChildDebuggerSettings settings_;
+    std::ofstream         log_file_;
+
     std::array<CComPtr<Microsoft::VisualStudio::Debugger::DkmString>, 6> create_process_function_names_;
 };
 

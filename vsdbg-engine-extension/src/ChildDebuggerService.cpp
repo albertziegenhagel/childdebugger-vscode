@@ -32,8 +32,6 @@ static const GUID source_id = {
     0x0bb8'9d05, 0x9ead, 0x4295, {0x9a, 0x74, 0xa2, 0x41, 0x58, 0x3d, 0xe4, 0x20}
 };
 
-// TODO: add parameter stack definitions for `CreateProcessWithToken` and `CreateProcessWithLogon`.
-
 template<typename T>
 T try_get_or(const nlohmann::json& json, std::string_view name, T default_value)
 {
@@ -326,10 +324,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
         {
             const auto settings_json = nlohmann::json::parse(utf8_settings_str);
 
-            settings_.enabled                 = try_get_or(settings_json, "enabled", false);
             settings_.suspend_parents         = try_get_or(settings_json, "suspendParents", true);
             settings_.suspend_children        = try_get_or(settings_json, "suspendChildren", true);
             settings_.skip_initial_breakpoint = try_get_or(settings_json, "skipInitialBreakpoint", true);
+            settings_.attach_any              = try_get_or(settings_json, "attachAny", true);
             settings_.attach_others           = try_get_or(settings_json, "attachOthers", true);
 
             settings_.process_configs.clear();
@@ -344,16 +342,18 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
                             .attach           = try_get_or(config_entry, "attach", true)});
                 }
             }
+
+            enabled_ = true;
         }
         catch(const nlohmann::json::parse_error& ex)
         {
             log_file_ << "  Failed to parse JSON settings: " << ex.what() << "\n";
             log_file_.flush();
         }
-        log_file_ << "  enabled:               " << settings_.enabled << "\n";
         log_file_ << "  suspendParents:        " << settings_.suspend_parents << "\n";
         log_file_ << "  suspendChildren:       " << settings_.suspend_children << "\n";
         log_file_ << "  skipInitialBreakpoint: " << settings_.skip_initial_breakpoint << "\n";
+        log_file_ << "  attachAny:             " << settings_.attach_any << "\n";
         log_file_ << "  attachOthers:          " << settings_.attach_others << "\n";
         log_file_ << "  processConfigs:\n";
         for(const auto& config : settings_.process_configs)
@@ -368,7 +368,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
     case CustomMessageType::resume_child:
     case CustomMessageType::inform_child:
     {
-        if(!settings_.enabled) return S_OK;
+        if(!enabled_) return S_OK;
 
         if(custom_message->Parameter1() == nullptr || custom_message->Parameter1()->Type() != VT_I4) return S_FALSE;
         if(custom_message->Parameter2() == nullptr || custom_message->Parameter2()->Type() != VT_I4) return S_FALSE;
@@ -424,7 +424,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
     break;
     case CustomMessageType::resume_parent:
     {
-        if(!settings_.enabled) return S_OK;
+        if(!enabled_) return S_OK;
 
         if(custom_message->Parameter1() == nullptr || custom_message->Parameter1()->Type() != VT_I4) return S_FALSE;
         if(custom_message->Parameter2() == nullptr || custom_message->Parameter2()->Type() != VT_I4) return S_FALSE;
@@ -468,7 +468,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
     DkmWorkList* /*work_list*/,
     DkmEventDescriptorS* /*event_descriptor*/)
 {
-    if(!settings_.enabled) return S_OK;
+    if(!enabled_) return S_OK;
+    if(!settings_.attach_any) return S_OK;
 
     // Check whether the loaded module is one of the Windows core DLLs that provide any of the Win32 API
     // functions for child process creation that we are interested in.
@@ -551,7 +552,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     bool /*has_exception*/,
     DkmEventDescriptorS* /*event_descriptor*/)
 {
-    if(!settings_.enabled) return S_OK;
+    if(!enabled_) return S_OK;
+    if(!settings_.attach_any) return S_OK;
 
     log_file_ << "OnRuntimeBreakpoint (Debugger PID " << GetCurrentProcessId() << ")\n";
     std::array<wchar_t, 64> guid_str = {L'\0'};
@@ -722,7 +724,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
     _In_ bool /*show_as_exception*/,
     _In_ DkmEventDescriptorS* event_descriptor)
 {
-    if(!settings_.enabled) return S_OK;
+    if(!enabled_) return S_OK;
     if(!settings_.skip_initial_breakpoint) return S_OK;
 
     log_file_ << "On OnEmbeddedBreakpointHitReceived (Debugger PID " << GetCurrentProcessId() << ")\n";

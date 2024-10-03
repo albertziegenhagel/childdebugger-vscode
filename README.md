@@ -29,15 +29,11 @@ It is intended to be the VS Code equivalent of the [Microsoft Child Process Debu
 
 > NOTE: pre-build binaries are currently available for Windows x86-64 only.
 
-This extension has not yet been published in the VS Code Marketplace.
+This extension has been published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=albertziegenhagel.childdebugger).
 
-You can download the latest pre-release `*.vsix` package from the "Rolling release" at
+It is suggested to install the latest release via VS Code's extension manager.
 
-https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head
-
-and [install it in VS Code manually](https://code.visualstudio.com/docs/editor/extension-marketplace#_install-from-a-vsix).
-
-The extension will automatically install an integration into the VS Debug Engine when it is activated. You can confirm that this integration was installed successfully by checking that you see something similar to 
+When installed in VS Code, the extension will automatically install an integration into the VS Debug Engine when it is activated. You can confirm that this integration was installed successfully by checking that you see something similar to 
 
 ```
 -------------------------------------------------------------------
@@ -49,6 +45,12 @@ Loading extensions from 'C:\Users\[User]\.vscode\extensions\albertziegenhagel-ch
 ```
 
 in the beginning of the `DEBUG CONSOLE` output view when debugging any native application through the C++ `cppvsdbg` debugger.
+
+If you want to try out the very latest features, you can can download the latest pre-release `*.vsix` package from the "Rolling release" at
+
+https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head
+
+and [install it in VS Code manually](https://code.visualstudio.com/docs/editor/extension-marketplace#_install-from-a-vsix).
 
 ## Usage
 

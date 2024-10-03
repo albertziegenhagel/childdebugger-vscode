@@ -11,6 +11,8 @@ interface EngineProcessConfig {
 	attach: boolean,
 }
 interface EngineSettings {
+	logLevel: string, //"off" | "error" | "info" | "debug" | "trace",
+
 	suspendChildren: boolean,
 	suspendParents: boolean,
 	skipInitialBreakpoint: boolean,
@@ -175,6 +177,8 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		const engineSettings: EngineSettings = {
+			logLevel: globalConfiguration.get<string>("general.logLevel", "error"),
+
 			suspendChildren: globalConfiguration.get<boolean>("general.suspendChildren", true),
 			suspendParents: globalConfiguration.get<boolean>("general.suspendParents", true),
 

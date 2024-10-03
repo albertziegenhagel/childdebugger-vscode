@@ -4,7 +4,7 @@
 #include <cassert>
 #include <chrono>
 #include <filesystem>
-#include <iostream>
+#include <format>
 #include <memory>
 #include <string>
 #include <thread>
@@ -69,19 +69,21 @@ HRESULT read_string_from_memory_at(
 }
 
 bool check_attach_to_process(
-    const ChildDebuggerSettings& settings,
-    std::ofstream&               log_file,
-    const CComPtr<DkmString>&    application_name,
-    const CComPtr<DkmString>&    command_line)
+    const ChildDebuggerSettings&         settings,
+    Logger&                              logger,
+    DefaultPort::DkmTransportConnection* connection,
+    const CComPtr<DkmString>&            application_name,
+    const CComPtr<DkmString>&            command_line)
 {
     if(!application_name && !command_line) return settings.attach_others;
 
     for(const auto& config : settings.process_configs)
     {
-        log_file << "  Check process config: "
-                 << "\n";
-        log_file << "    applicationName: " << (config.application_name ? utf16_to_utf8(*config.application_name) : "<EMPTY>") << "\n";
-        log_file << "    commandLine: " << (config.command_line ? utf16_to_utf8(*config.command_line) : "<EMPTY>") << "\n";
+        logger.log(LogLevel::trace, connection, L"  Check process config: \n"
+                                                L"    applicationName: {}\n"
+                                                L"    commandLine:     {}",
+                   (config.application_name ? *config.application_name : L"<EMPTY>"),
+                   (config.command_line ? *config.command_line : L"<EMPTY>"));
 
         // Skip invalid, empty config
         if(!config.application_name && !config.command_line) continue;
@@ -112,26 +114,23 @@ bool check_attach_to_process(
             if(!command_line_view.contains(*config.command_line)) continue;
         }
 
-        log_file << "    matched. attach: " << config.attach << "\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, connection, L"    matched. attach: {}", config.attach);
         return config.attach;
     }
 
-    log_file << "  No process config match. attach: " << settings.attach_others << "\n";
-    log_file.flush();
+    logger.log(LogLevel::trace, connection, L"  No process config match. attach: {}", settings.attach_others);
     return settings.attach_others;
 }
 
 template<typename FunctionSignature>
-HRESULT load_function_context(std::ofstream&                               log_file,
+HRESULT load_function_context(Logger&                                      logger,
                               DkmThread&                                   thread,
                               BasicFunctionCallContext<FunctionSignature>& context)
 {
     const UINT32 context_flags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
     if(thread.GetContext(context_flags, &context.registers, sizeof(context.registers)) != S_OK)
     {
-        log_file << "  FAILED to retrieve thread register context.\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to retrieve thread register context");
         return S_FALSE;
     }
 
@@ -139,8 +138,7 @@ HRESULT load_function_context(std::ofstream&                               log_f
 
     if(thread.Process()->ReadMemory(stack_pointer, DkmReadMemoryFlags::None, context.stack.data(), context.stack.size(), nullptr) != S_OK)
     {
-        log_file << "  FAILED to read stack.\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read stack");
         return S_FALSE;
     }
 
@@ -148,7 +146,7 @@ HRESULT load_function_context(std::ofstream&                               log_f
 }
 
 template<typename FunctionSignature>
-HRESULT store_function_context(std::ofstream&                               log_file,
+HRESULT store_function_context(Logger&                                      logger,
                                DkmThread&                                   thread,
                                BasicFunctionCallContext<FunctionSignature>& context)
 {
@@ -159,8 +157,7 @@ HRESULT store_function_context(std::ofstream&                               log_
         std::memcpy(register_bytes.Members, &context.registers, sizeof(context.registers));
         if(thread.SetContext(register_bytes) != S_OK)
         {
-            log_file << "  FAILED to write thread register context.\n";
-            log_file.flush();
+            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write thread register context");
             return S_FALSE;
         }
     }
@@ -174,8 +171,7 @@ HRESULT store_function_context(std::ofstream&                               log_
         std::memcpy(stack_bytes.Members, context.stack.data(), context.stack.size());
         if(thread.Process()->WriteMemory(stack_pointer, stack_bytes) != S_OK)
         {
-            log_file << "  FAILED to write stack memory.\n";
-            log_file.flush();
+            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write stack memory");
             return S_FALSE;
         }
     }
@@ -186,12 +182,12 @@ HRESULT store_function_context(std::ofstream&                               log_
 template<typename FunctionContextType>
 HRESULT handle_call_to_create_process(
     const ChildDebuggerSettings& settings,
-    std::ofstream&               log_file,
+    Logger&                      logger,
     DkmThread&                   thread,
     bool                         is_unicode)
 {
     FunctionContextType function_call_context;
-    load_function_context(log_file, thread, function_call_context);
+    load_function_context(logger, thread, function_call_context);
 
     // Extract the application name from the passed arguments.
     // Assuming x64 calling conventions, the pointer to the string in memory is stored in the
@@ -199,14 +195,12 @@ HRESULT handle_call_to_create_process(
     CComPtr<DkmString> application_name;
     if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpApplicationName(), is_unicode, application_name) != S_OK)
     {
-        log_file << "  FAILED to read application name argument.\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read application name argument");
         return S_FALSE;
     }
     if(application_name)
     {
-        log_file << "  APP " << utf16_to_utf8(application_name->Value()) << "\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, thread.Connection(), L"  APP {}", application_name->Value());
     }
 
     // Extract the command line from the passed arguments.
@@ -215,49 +209,43 @@ HRESULT handle_call_to_create_process(
     CComPtr<DkmString> command_line;
     if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpCommandLine(), is_unicode, command_line) != S_OK)
     {
-        log_file << "  FAILED to read command line argument.\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read command line argument");
         return S_FALSE;
     }
     if(command_line)
     {
-        log_file << "  CL " << utf16_to_utf8(command_line->Value()) << "\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, thread.Connection(), L"  CL {}", command_line->Value());
     }
 
-    if(!check_attach_to_process(settings, log_file, application_name, command_line)) return S_OK;
+    if(!check_attach_to_process(settings, logger, thread.Connection(), application_name, command_line)) return S_OK;
 
     const auto creation_flags = function_call_context.get_dwCreationFlags();
-    log_file << "  dwCreationFlags=" << creation_flags << "\n";
+    logger.log(LogLevel::trace, thread.Connection(), L"  dwCreationFlags={}", creation_flags);
 
     // If want to suspend the child process and it is not already requested to be suspended
     // originally, we enforce a suspended process creation.
     bool forced_suspension = false;
     if((creation_flags & CREATE_SUSPENDED) != 0)
     {
-        log_file << "  Originally requested suspended start\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, thread.Connection(), L"  Originally requested suspended start");
     }
     else if(settings.suspend_children)
     {
         function_call_context.set_dwCreationFlags(creation_flags | CREATE_SUSPENDED);
         forced_suspension = true;
-        log_file << "  Force suspended start\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, thread.Connection(), L"  Force suspended start");
     }
     else
     {
-        log_file << "  Skip suspended start\n";
-        log_file.flush();
+        logger.log(LogLevel::trace, thread.Connection(), L"  Skip suspended start");
     }
 
-    store_function_context(log_file, thread, function_call_context);
+    store_function_context(logger, thread, function_call_context);
 
     CComPtr<DkmInstructionAddress> address;
     if(thread.Process()->CreateNativeInstructionAddress(function_call_context.get_return_address(), &address) != S_OK)
     {
-        log_file << "  FAILED to create native instruction address from function return address.\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create native instruction address from function return address");
         return S_FALSE;
     }
 
@@ -268,15 +256,13 @@ HRESULT handle_call_to_create_process(
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
     if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
     {
-        log_file << "  FAILED to create breakpoint!\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create breakpoint!");
         return S_FALSE;
     }
 
     if(breakpoint->Enable() != S_OK)
     {
-        log_file << "  FAILED to enable breakpoint!\n";
-        log_file.flush();
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to enable breakpoint!");
         return S_FALSE;
     }
 
@@ -285,12 +271,19 @@ HRESULT handle_call_to_create_process(
 
 CChildDebuggerService::CChildDebuggerService()
 {
-    const auto* const log_file_name = "ChildDebugger.log";
+    const auto* const log_file_name   = "ChildDebugger.log";
+    const auto* const debug_file_name = "EnableChildDebuggerLogging";
 
     const auto root = get_current_module_path();
 
-    const auto log_file_path = root ? (*root / log_file_name) : log_file_name;
-    log_file_.open(log_file_path, std::ios::out | std::ios::app);
+    const auto debug_file_path = root ? (*root / debug_file_name) : debug_file_name;
+    if(std::filesystem::exists(debug_file_path))
+    {
+        logger_.set_log_level(LogLevel::trace);
+
+        const auto log_file_path = root ? (*root / log_file_name) : log_file_name;
+        logger_.set_log_file(log_file_path);
+    }
 
     DkmString::Create(L"CreateProcessW", &create_process_function_names_[0]);
     DkmString::Create(L"CreateProcessA", &create_process_function_names_[1]);
@@ -304,9 +297,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
     DkmCustomMessage* custom_message,
     DkmCustomMessage** /*reply_message*/)
 {
-    log_file_ << "On CustomMessage (Debugger PID " << GetCurrentProcessId() << ")\n";
-    log_file_ << "  MessageCode " << custom_message->MessageCode() << "\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, custom_message->Connection(),
+                L"On CustomMessage (Debugger PID {})\n"
+                L"  MessageCode {}\n",
+                GetCurrentProcessId(), custom_message->MessageCode());
 
     switch(CustomMessageType(custom_message->MessageCode()))
     {
@@ -323,6 +317,17 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
         try
         {
             const auto settings_json = nlohmann::json::parse(utf8_settings_str);
+
+            const auto log_level_str = try_get_optional_string(settings_json, "logLevel");
+            if(log_level_str)
+            {
+                if(*log_level_str == L"off") logger_.set_log_level(LogLevel::off);
+                else if(*log_level_str == L"error") logger_.set_log_level(LogLevel::error);
+                else if(*log_level_str == L"info") logger_.set_log_level(LogLevel::info);
+                else if(*log_level_str == L"debug") logger_.set_log_level(LogLevel::debug);
+                else if(*log_level_str == L"trace") logger_.set_log_level(LogLevel::trace);
+                else logger_.log(LogLevel::error, custom_message->Connection(), L"  Invalid log level setting: {}\n", *log_level_str);
+            }
 
             settings_.suspend_parents         = try_get_or(settings_json, "suspendParents", true);
             settings_.suspend_children        = try_get_or(settings_json, "suspendChildren", true);
@@ -347,22 +352,31 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
         }
         catch(const nlohmann::json::parse_error& ex)
         {
-            log_file_ << "  Failed to parse JSON settings: " << ex.what() << "\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to parse JSON settings: {}\n", utf8_to_utf16(ex.what()));
         }
-        log_file_ << "  suspendParents:        " << settings_.suspend_parents << "\n";
-        log_file_ << "  suspendChildren:       " << settings_.suspend_children << "\n";
-        log_file_ << "  skipInitialBreakpoint: " << settings_.skip_initial_breakpoint << "\n";
-        log_file_ << "  attachAny:             " << settings_.attach_any << "\n";
-        log_file_ << "  attachOthers:          " << settings_.attach_others << "\n";
-        log_file_ << "  processConfigs:\n";
+
+        logger_.log(LogLevel::trace, custom_message->Connection(),
+                    L"  suspendParents:        {}\n"
+                    L"  suspendChildren:       {}\n"
+                    L"  skipInitialBreakpoint: {}\n"
+                    L"  attachAny:             {}\n"
+                    L"  attachOthers:          {}\n"
+                    L"  processConfigs:\n",
+                    settings_.suspend_parents,
+                    settings_.suspend_children,
+                    settings_.skip_initial_breakpoint,
+                    settings_.attach_any,
+                    settings_.attach_others);
         for(const auto& config : settings_.process_configs)
         {
-            log_file_ << "    applicationName:        " << (config.application_name ? utf16_to_utf8(*config.application_name) : "<EMPTY>") << "\n";
-            log_file_ << "    commandLine:            " << (config.command_line ? utf16_to_utf8(*config.command_line) : "<EMPTY>") << "\n";
-            log_file_ << "    attach:                 " << config.attach << "\n";
+            logger_.log(LogLevel::trace, custom_message->Connection(),
+                        L"    applicationName:       {}\n"
+                        L"    commandLine:           {}\n"
+                        L"    attach:                {}\n",
+                        (config.application_name ? *config.application_name : L"<EMPTY>"),
+                        (config.command_line ? *config.command_line : L"<EMPTY>"),
+                        config.attach);
         }
-        log_file_.flush();
     }
     break;
     case CustomMessageType::resume_child:
@@ -375,30 +389,28 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
 
         const auto process_id = custom_message->Parameter1()->Value().lVal;
         const auto thread_id  = custom_message->Parameter2()->Value().lVal;
-        log_file_ << "  child PID " << process_id << "\n";
-        log_file_ << "  child TID " << thread_id << "\n";
+        logger_.log(LogLevel::trace, custom_message->Connection(), L"  child PID {}\n"
+                                                                   L"  child TID {}\n",
+                    process_id, thread_id);
 
         CComPtr<DkmProcess> process;
         if(custom_message->Connection()->FindLiveProcess(process_id, &process) != S_OK)
         {
-            log_file_ << "  Failed to find process\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to find process\n");
             return S_FALSE;
         }
 
         CComObject<ChildProcessDataItem>* com_obj;
         if(auto hr = CComObject<ChildProcessDataItem>::CreateInstance(&com_obj); FAILED(hr))
         {
-            log_file_ << "  Failed to create child process ComObject instance\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to create child process ComObject instance\n");
             return hr;
         }
 
         const CComPtr<ChildProcessDataItem> child_info(com_obj);
         if(auto hr = process->SetDataItem(DkmDataCreationDisposition::CreateNew, child_info); FAILED(hr))
         {
-            log_file_ << "  Failed to set child process data item\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to set child process data item\n");
             return hr;
         }
 
@@ -407,17 +419,14 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
             auto* const thread_handle = OpenThread(THREAD_SUSPEND_RESUME, 0, thread_id);
             if(thread_handle == nullptr)
             {
-                log_file_ << "  Failed to open thread\n";
-                log_file_.flush();
+                logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to open thread\n");
                 return S_FALSE;
             }
 
             // Resume the thread.
-            log_file_ << "  CALL ResumeThread\n";
-            log_file_.flush();
+            logger_.log(LogLevel::trace, custom_message->Connection(), L"  CALL ResumeThread\n");
             const auto suspend_count = ResumeThread(thread_handle);
-            log_file_ << "  RESULT " << suspend_count << "\n";
-            log_file_.flush();
+            logger_.log(LogLevel::trace, custom_message->Connection(), L"  RESULT {}\n", suspend_count);
             CloseHandle(thread_handle);
         }
     }
@@ -431,30 +440,28 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::SendLower(
 
         const auto process_id = custom_message->Parameter1()->Value().lVal;
         const auto thread_id  = custom_message->Parameter2()->Value().lVal;
-        log_file_ << "  parent PID " << process_id << "\n";
-        log_file_ << "  parent TID " << thread_id << "\n";
+        logger_.log(LogLevel::trace, custom_message->Connection(), L"  parent PID {}\n"
+                                                                   L"  parent TID {}\n",
+                    process_id, thread_id);
 
         CComPtr<DkmProcess> process;
         if(custom_message->Connection()->FindLiveProcess(process_id, &process) != S_OK)
         {
-            log_file_ << "  Failed to find process\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to find process\n");
             return S_FALSE;
         }
 
         CComPtr<DkmThread> thread;
         if(process->FindSystemThread(thread_id, &thread) != S_OK)
         {
-            log_file_ << "  Failed to find thread\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to find thread\n");
             return S_FALSE;
         }
 
         UINT32 external_suspension_count;
         if(thread->Resume(true, &external_suspension_count) != S_OK)
         {
-            log_file_ << "  Failed to resume thread\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, custom_message->Connection(), L"  FAILED to resume thread\n");
             return S_FALSE;
         }
     }
@@ -500,11 +507,15 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         CComPtr<Native::DkmNativeInstructionAddress> address;
         if(native_module_instance->FindExportName(function_name, true, &address) != S_OK) continue;
 
-        log_file_ << "OnModuleInstanceLoad (Debugger PID " << GetCurrentProcessId() << ")\n";
-        log_file_ << "  " << utf16_to_utf8(module_instance->Name()->Value()) << "\n";
-        log_file_ << "  Base address " << module_instance->BaseAddress() << "\n";
-        log_file_ << "  Function address " << utf16_to_utf8(function_name->Value()) << " @" << address->RVA() << "\n";
-        log_file_.flush();
+        logger_.log(LogLevel::trace, module_instance->Connection(),
+                    L"OnModuleInstanceLoad (Debugger PID {})\n"
+                    L"  {}\n"
+                    L"  Base address {}\n"
+                    L"  Function address {} @{}\n",
+                    GetCurrentProcessId(),
+                    module_instance->Name()->Value(),
+                    module_instance->BaseAddress(),
+                    function_name->Value(), address->RVA());
 
         // TODO: Simplify this:
         const auto function_type = [&function_name]() -> CreateFunctionType
@@ -531,15 +542,13 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
         if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, in_info, &breakpoint) != S_OK)
         {
-            log_file_ << "  FAILED to create breakpoint!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, module_instance->Connection(), L"  FAILED to create breakpoint\n");
             continue;
         }
 
         if(breakpoint->Enable() != S_OK)
         {
-            log_file_ << "  FAILED to enable breakpoint!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, module_instance->Connection(), L"  FAILED to enable breakpoint\n");
             continue;
         }
     }
@@ -555,11 +564,10 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     if(!enabled_) return S_OK;
     if(!settings_.attach_any) return S_OK;
 
-    log_file_ << "OnRuntimeBreakpoint (Debugger PID " << GetCurrentProcessId() << ")\n";
+    logger_.log(LogLevel::trace, thread->Connection(), L"OnRuntimeBreakpoint (Debugger PID {})\n", GetCurrentProcessId());
     std::array<wchar_t, 64> guid_str = {L'\0'};
     StringFromGUID2(runtime_breakpoint->SourceId(), guid_str.data(), guid_str.size());
-    log_file_ << "  Source ID:" << utf16_to_utf8(guid_str.data()) << "\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, thread->Connection(), L"  Source ID: {}\n", guid_str.data());
 
     CComPtr<CreateInInfo> in_info;
     runtime_breakpoint->GetDataItem(&in_info);
@@ -572,22 +580,20 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         //  - maybe, modify the passed arguments to force  suspended start.
         //  - create a new breakpoint that is triggered when the create process function is finished.
 
-        log_file_ << "  In PID " << thread->Process()->LivePart()->Id << ": Start CreateProcess: W " << in_info->get_is_unicode() << " Func " << (int)in_info->get_function_type() << "\n";
-        log_file_.flush();
+        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}: Start CreateProcess: W {} Func {}\n", thread->Process()->LivePart()->Id, in_info->get_is_unicode(), (int)in_info->get_function_type());
 
         switch(in_info->get_function_type())
         {
         case CreateFunctionType::create_process:
-            return handle_call_to_create_process<CreateProcessFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+            return handle_call_to_create_process<CreateProcessFunctionCallContext>(settings_, logger_, *thread, in_info->get_is_unicode());
         case CreateFunctionType::create_process_as_user:
-            return handle_call_to_create_process<CreateProcessAsUserFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+            return handle_call_to_create_process<CreateProcessAsUserFunctionCallContext>(settings_, logger_, *thread, in_info->get_is_unicode());
         case CreateFunctionType::create_process_with_token:
-            return handle_call_to_create_process<CreateProcessWithTokenFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+            return handle_call_to_create_process<CreateProcessWithTokenFunctionCallContext>(settings_, logger_, *thread, in_info->get_is_unicode());
         case CreateFunctionType::create_process_with_logon:
-            return handle_call_to_create_process<CreateProcessWithLogonFunctionCallContext>(settings_, log_file_, *thread, in_info->get_is_unicode());
+            return handle_call_to_create_process<CreateProcessWithLogonFunctionCallContext>(settings_, logger_, *thread, in_info->get_is_unicode());
         default:
-            log_file_ << "  Unsupported create function type: " << ((int)in_info->get_function_type()) << ".\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  Unsupported create function type: {}\n", (int)in_info->get_function_type());
             return S_FALSE;
         }
     }
@@ -601,9 +607,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         //  - extract the process ID if of the created child process.
         //  - inform the debug client (VS Code) about the newly created process, so that it can attach to it.
 
-        log_file_ << "  In PID " << thread->Process()->LivePart()->Id << ": Finish CreateProcess"
-                  << "\n";
-        log_file_.flush();
+        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}: Finish CreateProcess\n", thread->Process()->LivePart()->Id);
 
         runtime_breakpoint->Close(); // Remove this breakpoint. We will create a new one for the next call.
 
@@ -612,17 +616,15 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         const UINT32 context_flags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
         if(thread->GetContext(context_flags, &context, sizeof(CONTEXT)) != S_OK)
         {
-            log_file_ << "  FAILED to retrieve thread context.\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to retrieve thread context\n");
             return S_FALSE;
         }
 
         // The RAX register holds the return value.
-        log_file_ << "  CreateProcess returned " << get_return_value(context) << "\n";
+        logger_.log(LogLevel::trace, thread->Connection(), L"  CreateProcess returned {}\n", get_return_value(context));
         if(get_return_value(context) == 0)
         {
             // Nothing to attach to if the CreateProcess call failed.
-            log_file_.flush();
             return S_OK;
         }
 
@@ -631,8 +633,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         PROCESS_INFORMATION proc_info;
         if(thread->Process()->ReadMemory(out_info->get_process_information_address(), DkmReadMemoryFlags::None, &proc_info, sizeof(PROCESS_INFORMATION), nullptr) != S_OK)
         {
-            log_file_ << "  FAILED to read process information!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to read process information\n");
             return S_FALSE;
         }
 
@@ -651,10 +652,14 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
             CloseHandle(process_handle);
         }
 
-        log_file_ << "  Child App Name " << utf16_to_utf8(application_name) << "\n";
-        log_file_ << "  Child PID " << proc_info.dwProcessId << " TID " << proc_info.dwThreadId << "\n";
-        log_file_ << "  Child P-HANDLE " << proc_info.hProcess << " T-HANDLE " << proc_info.hThread << "\n";
-        log_file_.flush();
+        logger_.log(LogLevel::trace, thread->Connection(), L"  Child App Name {}\n"
+                                                           L"  Child PID      {} TID      {}\n"
+                                                           L"  Child P-HANDLE {} T-HANDLE {}\n",
+                    application_name,
+                    proc_info.dwProcessId,
+                    proc_info.dwThreadId,
+                    proc_info.hProcess,
+                    proc_info.hThread);
 
         // To make sure all this does not impose any unwanted effects, we suspend
         // the current parent process here, and only resume it when the debugger
@@ -664,8 +669,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
             UINT32 external_suspension_count;
             if(thread->Suspend(true, &external_suspension_count) != 0)
             {
-                log_file_ << "  FAILED to suspend parent process.\n";
-                log_file_.flush();
+                logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to suspend parent process\n");
                 return S_FALSE;
             }
         }
@@ -692,23 +696,20 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
                                  .c_str(),
                              &message_str) != S_OK)
         {
-            log_file_ << "  FAILED to create string for message!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to create string for message\n");
             return S_FALSE;
         }
 
         CComPtr<DkmUserMessage> message;
         if(DkmUserMessage::Create(thread->Connection(), thread->Process(), DkmUserMessageOutputKind::UnfilteredOutputWindowMessage, message_str, MB_OK, S_OK, &message) != S_OK)
         {
-            log_file_ << "  FAILED to create user message!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to create user message\n");
             return S_FALSE;
         }
 
         if(message->Post() != S_OK)
         {
-            log_file_ << "  FAILED to post user message!\n";
-            log_file_.flush();
+            logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to post user message\n");
             return S_FALSE;
         }
 
@@ -727,42 +728,33 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
     if(!enabled_) return S_OK;
     if(!settings_.skip_initial_breakpoint) return S_OK;
 
-    log_file_ << "On OnEmbeddedBreakpointHitReceived (Debugger PID " << GetCurrentProcessId() << ")\n";
+    logger_.log(LogLevel::trace, thread->Connection(), L"On OnEmbeddedBreakpointHitReceived (Debugger PID {})\n", GetCurrentProcessId());
 
     // The initial breakpoint is in ntdll.dll!LdrpDoDebuggerBreak()
     if(DkmString::CompareOrdinalIgnoreCase(instruction_address->ModuleInstance()->Name(), L"ntdll.dll") != 0) return S_OK;
 
-    log_file_ << "  IN NTDLL\n";
-    log_file_.flush();
-
-    log_file_ << " THREAD " << thread << "\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, thread->Connection(), L"  IN NTDLL\n");
 
     if(thread == nullptr) return S_FALSE;
-    log_file_ << " PROCESS " << thread->Process() << "\n";
-    log_file_.flush();
     if(thread->Process() == nullptr) return S_FALSE;
 
-    log_file_ << "  Has process\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, thread->Connection(), L"  Has process\n");
 
     CComPtr<ChildProcessDataItem> child_info;
     if(thread->Process()->GetDataItem(&child_info) != S_OK)
     {
-        log_file_ << "  FAILED to get process child info.\n";
-        log_file_.flush();
+        logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to get process child info\n");
         return S_FALSE;
     }
     if(!child_info)
     {
-        log_file_ << "  NO child info\n";
-        log_file_.flush();
+        logger_.log(LogLevel::trace, thread->Connection(), L"  NO child info\n");
         return S_OK;
     }
 
-    log_file_ << "  Has child info\n";
-    log_file_ << "    Passed Initial Breakpoint " << child_info->get_passed_initial_breakpoint() << "\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, thread->Connection(), L"  Has child info\n"
+                                                       L"  Passed Initial Breakpoint: {}\n",
+                child_info->get_passed_initial_breakpoint());
 
     // Skip if we passed the initial breakpoint already
     if(child_info->get_passed_initial_breakpoint()) return S_OK;
@@ -773,8 +765,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnEmbeddedBreakpointHitReceived
     // Set, that we passed the initial breakpoint for this process.
     child_info->set_passed_initial_breakpoint();
 
-    log_file_ << "  Suppressed\n";
-    log_file_.flush();
+    logger_.log(LogLevel::trace, thread->Connection(), L"  Suppressed\n");
 
     return S_OK;
 }

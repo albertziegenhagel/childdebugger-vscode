@@ -82,6 +82,26 @@
             "type": "boolean",
             "default": true,
             "description": "Whether to attach to any processes that did not match any of the explicit child process filters."
+          },
+          "childDebugger.general.logLevel": {
+            "order": 6,
+            "type": "string",
+            "default": "error",
+            "enum": [
+              "off",
+              "error",
+              "info",
+              "debug",
+              "trace"
+            ],
+            "enumDescriptions": [
+              "No log messages will be displayed",
+              "Only error messages will be displayed",
+              "Informational messages will be displayed",
+              "Debug messages will be displayed",
+              "All messages will be displayed"
+            ],
+            "description": "Log level of the debug engine extension. By default only error will be reported."
           }
         }
       }

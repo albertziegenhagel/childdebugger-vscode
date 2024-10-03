@@ -1,0 +1,206 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: "Publish Release"
+
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18.17
+
+      - name: Install VSCE
+        run: npm install -g @vscode/vsce
+
+      - name: Install NPM Dependencies
+        run: npm install
+
+      - name: Compile VSCode Extension
+        run: npm run compile
+
+      - uses: NuGet/setup-nuget@v1
+
+      - uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.25.0"
+          ninjaVersion: "^1.11.1"
+  
+      - name: Install VSDbg Engine Extension Dependencies
+        run: |
+          nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
+          nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+  
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x64
+  
+      - name: Configure VSDbg Engine Extension (x64)
+        run: |
+          mkdir build/x64
+          cd build/x64
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
+  
+      - name: Build & Install VSDbg Engine Extension (x64)
+        run: |
+          cd build/x64
+          ninja install
+
+      - uses: TheMrMilchmann/setup-msvc-dev@v2
+        with:
+          arch: x86
+  
+      - name: Configure VSDbg Engine Extension (x86)
+        run: |
+          mkdir build/x86
+          cd build/x86
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
+  
+      - name: Build & Install VSDbg Engine Extension (x86)
+        run: |
+          cd build/x86
+          ninja install
+
+      - name: Add build info
+        run: |
+          "ref:    ${{ github.ref_name }}`n" + `
+          "commit: ${{ github.sha }}`n"  + `
+          "date:   $(Get-Date -UFormat '%FT%T%Z' -AsUTC)" | Out-File -Path "${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt"
+
+      - name: Package VSIX
+        run: |
+          vsce package --target win32-x64
+
+      - name: Upload extension VSIX
+        uses: actions/upload-artifact@v3
+        with: 
+          name: childdebugger-win32-x64
+          path: ${{ github.workspace }}/*.vsix
+
+      - name: Upload test binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: childdebugger-win32-x64-tests
+          path: |
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v3
+        with:
+          name: childdebugger-win32-x64-debug-symbols
+          path: |
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/x64/ChildDebugger.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/x86/ChildDebugger.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
+
+      - name: Pack test binaries
+        run: |
+          mkdir pack-tests/tests/x64
+          mkdir pack-tests/tests/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.exe pack-tests/tests/x64
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.pdb pack-tests/tests/x64
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.exe pack-tests/tests/x64
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.pdb pack-tests/tests/x64
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.exe pack-tests/tests/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/caller.pdb pack-tests/tests/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.exe pack-tests/tests/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x86/callee.pdb pack-tests/tests/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt pack-tests
+          Compress-Archive `
+            -Path pack-tests/* `
+            -DestinationPath childdebugger-win32-x64-tests.zip
+
+      - name: Pack debug symbols
+        run: |
+          mkdir pack-debug-symbols/x64
+          mkdir pack-debug-symbols/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/x64/ChildDebugger.pdb pack-debug-symbols/x64
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/x86/ChildDebugger.pdb pack-debug-symbols/x86
+          cp ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt pack-debug-symbols
+          Compress-Archive `
+            -Path pack-debug-symbols/* `
+            -DestinationPath childdebugger-win32-x64-debug-symbols.zip
+
+      - name: Create GitHub release
+        run: |
+          $result = curl -L -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          "https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases" `
+          -d '{"tag_name":"${{ github.ref_name }}","name":"${{ github.ref_name }}","draft":true}'
+          echo $result
+          $result | ConvertFrom-Json | Select-Object -expand id | Out-File release-id
+
+      - name: Upload release asset (vsix)
+        run: |
+          $releaseId = cat .\release-id
+          $vsixName = $(ls childdebugger-win32-x64-*.vsix | Select-Object -First 1).Name
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@$vsixName" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/$releaseId/assets?name=$vsixName"
+
+      - name: Upload release asset (tests)
+        run: |
+          $releaseId = cat .\release-id
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@childdebugger-win32-x64-tests.zip" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/$releaseId/assets?name=childdebugger-win32-x64-tests.zip"
+
+      - name: Upload release asset (debug-sybols)
+        run: |
+          $releaseId = cat .\release-id
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@childdebugger-win32-x64-debug-symbols.zip" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/$releaseId/assets?name=childdebugger-win32-x64-debug-symbols.zip"
+
+      - name: Publish to Marketplace
+        if: success()
+        run: |
+          $vsixName = $(ls childdebugger-win32-x64-*.vsix | Select-Object -First 1).Name
+          vsce publish --packagePath $vsixName
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

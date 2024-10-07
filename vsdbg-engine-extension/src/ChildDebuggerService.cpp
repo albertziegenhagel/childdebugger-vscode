@@ -79,9 +79,9 @@ bool check_attach_to_process(
 
     for(const auto& config : settings.process_configs)
     {
-        logger.log(LogLevel::trace, connection, L"  Check process config: \n"
+        logger.log(LogLevel::trace, connection, L"  Check process config:\n"
                                                 L"    applicationName: {}\n"
-                                                L"    commandLine:     {}",
+                                                L"    commandLine:     {}\n",
                    (config.application_name ? *config.application_name : L"<EMPTY>"),
                    (config.command_line ? *config.command_line : L"<EMPTY>"));
 
@@ -114,11 +114,11 @@ bool check_attach_to_process(
             if(!command_line_view.contains(*config.command_line)) continue;
         }
 
-        logger.log(LogLevel::trace, connection, L"    matched. attach: {}", config.attach);
+        logger.log(LogLevel::trace, connection, L"    matched. attach: {}\n", config.attach);
         return config.attach;
     }
 
-    logger.log(LogLevel::trace, connection, L"  No process config match. attach: {}", settings.attach_others);
+    logger.log(LogLevel::trace, connection, L"  No process config match. attach: {}\n", settings.attach_others);
     return settings.attach_others;
 }
 
@@ -130,7 +130,7 @@ HRESULT load_function_context(Logger&                                      logge
     const UINT32 context_flags = CONTEXT_CONTROL | CONTEXT_INTEGER; // NOLINT(misc-redundant-expression)
     if(thread.GetContext(context_flags, &context.registers, sizeof(context.registers)) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to retrieve thread register context");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to retrieve thread register context\n");
         return S_FALSE;
     }
 
@@ -138,7 +138,7 @@ HRESULT load_function_context(Logger&                                      logge
 
     if(thread.Process()->ReadMemory(stack_pointer, DkmReadMemoryFlags::None, context.stack.data(), context.stack.size(), nullptr) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read stack");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read stack\n");
         return S_FALSE;
     }
 
@@ -157,7 +157,7 @@ HRESULT store_function_context(Logger&                                      logg
         std::memcpy(register_bytes.Members, &context.registers, sizeof(context.registers));
         if(thread.SetContext(register_bytes) != S_OK)
         {
-            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write thread register context");
+            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write thread register context\n");
             return S_FALSE;
         }
     }
@@ -171,7 +171,7 @@ HRESULT store_function_context(Logger&                                      logg
         std::memcpy(stack_bytes.Members, context.stack.data(), context.stack.size());
         if(thread.Process()->WriteMemory(stack_pointer, stack_bytes) != S_OK)
         {
-            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write stack memory");
+            logger.log(LogLevel::error, thread.Connection(), L"  FAILED to write stack memory\n");
             return S_FALSE;
         }
     }
@@ -195,12 +195,12 @@ HRESULT handle_call_to_create_process(
     CComPtr<DkmString> application_name;
     if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpApplicationName(), is_unicode, application_name) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read application name argument");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read application name argument\n");
         return S_FALSE;
     }
     if(application_name)
     {
-        logger.log(LogLevel::trace, thread.Connection(), L"  APP {}", application_name->Value());
+        logger.log(LogLevel::trace, thread.Connection(), L"  APP {}\n", application_name->Value());
     }
 
     // Extract the command line from the passed arguments.
@@ -209,35 +209,35 @@ HRESULT handle_call_to_create_process(
     CComPtr<DkmString> command_line;
     if(read_string_from_memory_at(thread.Process(), function_call_context.get_lpCommandLine(), is_unicode, command_line) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read command line argument");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to read command line argument\n");
         return S_FALSE;
     }
     if(command_line)
     {
-        logger.log(LogLevel::trace, thread.Connection(), L"  CL {}", command_line->Value());
+        logger.log(LogLevel::trace, thread.Connection(), L"  CL {}\n", command_line->Value());
     }
 
     if(!check_attach_to_process(settings, logger, thread.Connection(), application_name, command_line)) return S_OK;
 
     const auto creation_flags = function_call_context.get_dwCreationFlags();
-    logger.log(LogLevel::trace, thread.Connection(), L"  dwCreationFlags={}", creation_flags);
+    logger.log(LogLevel::trace, thread.Connection(), L"  dwCreationFlags={}\n", creation_flags);
 
     // If want to suspend the child process and it is not already requested to be suspended
     // originally, we enforce a suspended process creation.
     bool forced_suspension = false;
     if((creation_flags & CREATE_SUSPENDED) != 0)
     {
-        logger.log(LogLevel::trace, thread.Connection(), L"  Originally requested suspended start");
+        logger.log(LogLevel::trace, thread.Connection(), L"  Originally requested suspended start\n");
     }
     else if(settings.suspend_children)
     {
         function_call_context.set_dwCreationFlags(creation_flags | CREATE_SUSPENDED);
         forced_suspension = true;
-        logger.log(LogLevel::trace, thread.Connection(), L"  Force suspended start");
+        logger.log(LogLevel::trace, thread.Connection(), L"  Force suspended start\n");
     }
     else
     {
-        logger.log(LogLevel::trace, thread.Connection(), L"  Skip suspended start");
+        logger.log(LogLevel::trace, thread.Connection(), L"  Skip suspended start\n");
     }
 
     store_function_context(logger, thread, function_call_context);
@@ -245,7 +245,7 @@ HRESULT handle_call_to_create_process(
     CComPtr<DkmInstructionAddress> address;
     if(thread.Process()->CreateNativeInstructionAddress(function_call_context.get_return_address(), &address) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create native instruction address from function return address");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create native instruction address from function return address\n");
         return S_FALSE;
     }
 
@@ -262,13 +262,13 @@ HRESULT handle_call_to_create_process(
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
     if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create breakpoint!");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create breakpoint\n");
         return S_FALSE;
     }
 
     if(breakpoint->Enable() != S_OK)
     {
-        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to enable breakpoint!");
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to enable breakpoint\n");
         return S_FALSE;
     }
 

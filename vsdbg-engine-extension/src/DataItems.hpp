@@ -4,80 +4,29 @@
 
 #include "CreateFunctionType.hpp"
 
-// Base class for breakpoint information classes.
-template<typename Interface>
-class BaseObject : public Interface
-{
-    volatile LONG ref_count_;
-
-public:
-    virtual ~BaseObject() = default;
-
-    BaseObject() = default;
-
-    BaseObject(BaseObject&)             = delete;
-    BaseObject(BaseObject&&)            = delete;
-    BaseObject& operator=(BaseObject&)  = delete;
-    BaseObject& operator=(BaseObject&&) = delete;
-
-    ULONG __stdcall AddRef() override
-    {
-        return (ULONG)InterlockedIncrement(&ref_count_);
-    }
-    ULONG __stdcall Release() override
-    {
-        auto result = (ULONG)InterlockedDecrement(&ref_count_);
-        if(result == 0)
-        {
-            delete this;
-        }
-        return result;
-    }
-    HRESULT __stdcall QueryInterface(REFIID riid, _Deref_out_ void** ppv) override
-    {
-        if(riid == __uuidof(IUnknown))
-        {
-            *ppv = static_cast<IUnknown*>(this);
-            AddRef();
-            return S_OK;
-        }
-        // This example is implementing the optional interface IDkmDisposableDataItem
-        if(riid == __uuidof(Microsoft::VisualStudio::Debugger::IDkmDisposableDataItem))
-        {
-            *ppv = static_cast<Microsoft::VisualStudio::Debugger::IDkmDisposableDataItem*>(this);
-            AddRef();
-            return S_OK;
-        }
-
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-};
-
 // Class holding additional information for breakpoints to be triggered on
 // a call to any of the process creation functions.
-class __declspec(uuid("{1483C347-BDAD-4626-B33F-D16970542239}")) CreateInInfo :
-    public BaseObject<Microsoft::VisualStudio::Debugger::IDkmDisposableDataItem>
+class __declspec(uuid("{1483C347-BDAD-4626-B33F-D16970542239}")) CreateInInfoDataItem :
+    public IUnknown,
+    public CComObjectRootEx<CComMultiThreadModel>
 {
     bool               isUnicode_;
     CreateFunctionType functionType_;
 
 public:
-    explicit CreateInInfo(bool is_unicode, CreateFunctionType function_type) :
-        isUnicode_(is_unicode),
-        functionType_(function_type)
-    {}
+    explicit CreateInInfoDataItem() = default;
 
-    CreateInInfo(CreateInInfo&)             = delete;
-    CreateInInfo(CreateInInfo&&)            = delete;
-    CreateInInfo& operator=(CreateInInfo&)  = delete;
-    CreateInInfo& operator=(CreateInInfo&&) = delete;
+    CreateInInfoDataItem(CreateInInfoDataItem&)             = delete;
+    CreateInInfoDataItem(CreateInInfoDataItem&&)            = delete;
+    CreateInInfoDataItem& operator=(CreateInInfoDataItem&)  = delete;
+    CreateInInfoDataItem& operator=(CreateInInfoDataItem&&) = delete;
 
-    ~CreateInInfo() override = default;
+    ~CreateInInfoDataItem() = default;
 
-    HRESULT __stdcall OnClose() override
+    void initialize(bool is_unicode, CreateFunctionType function_type)
     {
-        return S_OK;
+        isUnicode_    = is_unicode;
+        functionType_ = function_type;
     }
 
     [[nodiscard]] bool get_is_unicode() const
@@ -89,33 +38,50 @@ public:
     {
         return functionType_;
     }
+
+protected:
+    // NOLINTNEXTLINE(bugprone-reserved-identifier, readability-identifier-naming)
+    HRESULT _InternalQueryInterface(REFIID riid, void** object)
+    {
+        if(object == nullptr)
+            return E_POINTER;
+
+        if(riid == __uuidof(IUnknown))
+        {
+            *object = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
 };
 
 // Class holding additional information for breakpoints to be triggered when
 // we return from a  call to any of the process creation functions.
-class __declspec(uuid("{F1AB4299-C3EB-47C5-83B7-813E28B9DA89}")) CreateOutInfo :
-    public BaseObject<Microsoft::VisualStudio::Debugger::IDkmDisposableDataItem>
+class __declspec(uuid("{F1AB4299-C3EB-47C5-83B7-813E28B9DA89}")) CreateOutInfoDataItem :
+    public IUnknown,
+    public CComObjectRootEx<CComMultiThreadModel>
 {
     UINT64 lpProcessInformation_;
     bool   suspended_;
 
 public:
-    explicit CreateOutInfo(UINT64 process_information, bool suspended) :
-        lpProcessInformation_(process_information),
-        suspended_(suspended)
-    {}
+    explicit CreateOutInfoDataItem() = default;
 
-    CreateOutInfo(CreateOutInfo&)             = delete;
-    CreateOutInfo(CreateOutInfo&&)            = delete;
-    CreateOutInfo& operator=(CreateOutInfo&)  = delete;
-    CreateOutInfo& operator=(CreateOutInfo&&) = delete;
-
-    ~CreateOutInfo() override = default;
-
-    HRESULT __stdcall OnClose() override
+    void initialize(UINT64 process_information, bool suspended)
     {
-        return S_OK;
+        lpProcessInformation_ = process_information;
+        suspended_            = suspended;
     }
+
+    CreateOutInfoDataItem(CreateOutInfoDataItem&)             = delete;
+    CreateOutInfoDataItem(CreateOutInfoDataItem&&)            = delete;
+    CreateOutInfoDataItem& operator=(CreateOutInfoDataItem&)  = delete;
+    CreateOutInfoDataItem& operator=(CreateOutInfoDataItem&&) = delete;
+
+    ~CreateOutInfoDataItem() = default;
 
     [[nodiscard]] UINT64 get_process_information_address() const
     {
@@ -125,6 +91,24 @@ public:
     [[nodiscard]] bool get_suspended() const
     {
         return suspended_;
+    }
+
+protected:
+    // NOLINTNEXTLINE(bugprone-reserved-identifier, readability-identifier-naming)
+    HRESULT _InternalQueryInterface(REFIID riid, void** object)
+    {
+        if(object == nullptr)
+            return E_POINTER;
+
+        if(riid == __uuidof(IUnknown))
+        {
+            *object = static_cast<IUnknown*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        *object = nullptr;
+        return E_NOINTERFACE;
     }
 };
 

@@ -250,8 +250,14 @@ HRESULT handle_call_to_create_process(
     }
 
     // Create a new breakpoint to be triggered when the child process creation is done.
-    CComPtr<CreateOutInfo> out_info;
-    out_info.Attach(new CreateOutInfo(function_call_context.get_lpProcessInformation(), forced_suspension));
+    CComObject<CreateOutInfoDataItem>* com_obj;
+    if(auto hr = CComObject<CreateOutInfoDataItem>::CreateInstance(&com_obj); FAILED(hr))
+    {
+        logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create out-info ComObject instance\n");
+        return hr;
+    }
+    const CComPtr<CreateOutInfoDataItem> out_info(com_obj);
+    out_info->initialize(function_call_context.get_lpProcessInformation(), forced_suspension);
 
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
     if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
@@ -536,8 +542,14 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnModuleInstanceLoad(
         }();
 
         // Attach some information to the breakpoint about the function it has been generated for.
-        CComPtr<CreateInInfo> in_info;
-        in_info.Attach(new CreateInInfo(function_name->Value()[function_name->Length() - 1] == L'W', function_type));
+        CComObject<CreateInInfoDataItem>* com_obj;
+        if(auto hr = CComObject<CreateInInfoDataItem>::CreateInstance(&com_obj); FAILED(hr))
+        {
+            logger_.log(LogLevel::error, module_instance->Connection(), L"  FAILED to create in-info ComObject instance\n");
+            return hr;
+        }
+        const CComPtr<CreateInInfoDataItem> in_info(com_obj);
+        in_info->initialize(function_name->Value()[function_name->Length() - 1] == L'W', function_type);
 
         CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
         if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, in_info, &breakpoint) != S_OK)
@@ -569,9 +581,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
     StringFromGUID2(runtime_breakpoint->SourceId(), guid_str.data(), guid_str.size());
     logger_.log(LogLevel::trace, thread->Connection(), L"  Source ID: {}\n", guid_str.data());
 
-    CComPtr<CreateInInfo> in_info;
-    runtime_breakpoint->GetDataItem(&in_info);
-    if(in_info != nullptr)
+    CComPtr<CreateInInfoDataItem> in_info;
+    if(auto hr = runtime_breakpoint->GetDataItem(&in_info); SUCCEEDED(hr) && in_info != nullptr)
     {
         // This is a breakpoint when entering a process creation function.
         // We will do the following things:
@@ -598,9 +609,8 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         }
     }
 
-    CComPtr<CreateOutInfo> out_info;
-    runtime_breakpoint->GetDataItem(&out_info);
-    if(out_info != nullptr)
+    CComPtr<CreateOutInfoDataItem> out_info;
+    if(auto hr = runtime_breakpoint->GetDataItem(&out_info); SUCCEEDED(hr) && out_info != nullptr)
     {
         // This is a breakpoint when a process creation has been completed.
         // We will do the following things:

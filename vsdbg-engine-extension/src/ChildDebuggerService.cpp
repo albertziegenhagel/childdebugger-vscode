@@ -261,7 +261,7 @@ HRESULT handle_call_to_create_process(
     out_info->initialize(function_call_context.get_lpProcessInformation(), forced_suspension);
 
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
-    if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
+    if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, &thread, address, false, out_info, &breakpoint) != S_OK)
     {
         logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create breakpoint\n");
         return S_FALSE;

@@ -93,11 +93,14 @@ int wmain(int argc, wchar_t* argv[])
 {
     const auto opts = parse_command_line(argc, argv);
 
-    std::wcout << L"  CALLEE (" << GetCurrentProcessId() << L"): initialized" << std::endl;
+    const auto pid = GetCurrentProcessId();
+    const auto tid = GetCurrentThreadId();
+
+    std::wcout << L"  CALLEE (" << pid << L", " << tid << L"): initialized" << std::endl;
 
     std::this_thread::sleep_for(opts.sleep_time);
 
-    std::wcout << L"  CALLEE (" << GetCurrentProcessId() << L"): terminating" << std::endl;
+    std::wcout << L"  CALLEE (" << pid << L", " << tid << L"): terminating" << std::endl;
 
     return EXIT_SUCCESS;
 }

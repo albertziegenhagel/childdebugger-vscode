@@ -29,7 +29,7 @@ jobs:
       - name: Compile VSCode Extension
         run: npm run compile
 
-      - uses: NuGet/setup-nuget@v1
+      - uses: NuGet/setup-nuget@v2
 
       - uses: lukka/get-cmake@latest
         with:
@@ -41,7 +41,7 @@ jobs:
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
   
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
   
@@ -61,7 +61,7 @@ jobs:
           cd build/x64
           ninja install
 
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x86
   
@@ -93,13 +93,13 @@ jobs:
           mv childdebugger-win32-x64-*.vsix childdebugger-win32-x64.vsix
 
       - name: Upload extension VSIX
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with: 
           name: childdebugger-win32-x64
           path: ${{ github.workspace }}/*.vsix
 
       - name: Upload test binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: childdebugger-win32-x64-tests
           path: |
@@ -114,7 +114,7 @@ jobs:
             ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt
 
       - name: Upload debug symbols
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: childdebugger-win32-x64-debug-symbols
           path: |

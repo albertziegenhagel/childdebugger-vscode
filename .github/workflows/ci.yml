@@ -28,7 +28,7 @@ jobs:
       - name: Run Linter
         run: npm run lint
 
-      - uses: NuGet/setup-nuget@v1
+      - uses: NuGet/setup-nuget@v2
 
       - uses: lukka/get-cmake@latest
         with:
@@ -40,7 +40,7 @@ jobs:
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
 
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
 
@@ -60,7 +60,7 @@ jobs:
           cd build/x64
           ninja install
 
-      - uses: TheMrMilchmann/setup-msvc-dev@v2
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x86
 

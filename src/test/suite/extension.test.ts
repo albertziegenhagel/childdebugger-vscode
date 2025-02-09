@@ -99,16 +99,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -232,6 +233,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid1 = debuggerConfigExtension1.childProcessId;
 		const ctid1 = debuggerConfigExtension1.childThreadId;
 		const ppid1 = debuggerConfigExtension1.parentProcessId;
+		const ptid1 = debuggerConfigExtension1.parentThreadId;
 
 		assert.strictEqual(childSession1.name, `caller.exe #${cpid1}`);
 
@@ -243,24 +245,24 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid2 = debuggerConfigExtension2.childProcessId;
 		const ctid2 = debuggerConfigExtension2.childThreadId;
 		const ppid2 = debuggerConfigExtension2.parentProcessId;
-		const ptid2 = debuggerConfigExtension2.parentProcessId;
+		const ptid2 = debuggerConfigExtension2.parentThreadId;
 
 		assert.strictEqual(childSession2.name, `callee.exe #${cpid2}`);
 
 		assert.strictEqual(ppid2, cpid1);
-		// assert.strictEqual(ptid2, ctid1); // We can probably not assume that the main thread starts the child process?
+		assert.strictEqual(ptid2, ctid1);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid1}): initialized\r\n` +
-			`  CALLER (${ppid1}): started process ${callerPath}; PID ${cpid1}; TID ${ctid1}\r\n` +
-			`  CALLER (${ppid1}): wait for child\r\n` +
+			`  CALLER (${ppid1}, ${ptid1}): started process ${callerPath}; PID ${cpid1}; TID ${ctid1}\r\n` +
+			`  CALLER (${ppid1}, ${ptid1}): wait for child\r\n` +
 			`  CALLER (${cpid1}): initialized\r\n` +
-			`  CALLER (${cpid1}): started process ${calleePath}; PID ${cpid2}; TID ${ctid2}\r\n` +
-			`  CALLER (${cpid1}): wait for child\r\n` +
-			`  CALLEE (${cpid2}): initialized\r\n` +
-			`  CALLEE (${cpid2}): terminating\r\n` +
-			`  CALLER (${cpid1}): terminating\r\n` +
-			`  CALLER (${ppid1}): terminating\r\n`
+			`  CALLER (${cpid1}, ${ctid1}): started process ${calleePath}; PID ${cpid2}; TID ${ctid2}\r\n` +
+			`  CALLER (${cpid1}, ${ctid1}): wait for child\r\n` +
+			`  CALLEE (${cpid2}, ${ctid2}): initialized\r\n` +
+			`  CALLEE (${cpid2}, ${ctid2}): terminating\r\n` +
+			`  CALLER (${cpid1}, ${ctid1}): terminating thread\r\n` +
+			`  CALLER (${ppid1}, ${ptid1}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -302,17 +304,18 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.isTrue(childSession.name.startsWith(`callee.exe #${cpid}`));
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): resumed child\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): resumed child\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -353,16 +356,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -403,16 +407,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -454,16 +459,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -504,16 +510,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -555,16 +562,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		const cpid = debuggerConfigExtension.childProcessId;
 		const ctid = debuggerConfigExtension.childThreadId;
 		const ppid = debuggerConfigExtension.parentProcessId;
+		const ptid = debuggerConfigExtension.parentThreadId;
 
 		assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 		assert.strictEqual(result.output,
 			`  CALLER (${ppid}): initialized\r\n` +
-			`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-			`  CALLER (${ppid}): wait for child\r\n` +
-			`  CALLEE (${cpid}): initialized\r\n` +
-			`  CALLEE (${cpid}): terminating\r\n` +
-			`  CALLER (${ppid}): terminating\r\n`
+			`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+			`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+			`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
 	}).timeout(100000);
@@ -607,16 +615,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			const cpid = debuggerConfigExtension.childProcessId;
 			const ctid = debuggerConfigExtension.childThreadId;
 			const ppid = debuggerConfigExtension.parentProcessId;
+			const ptid = debuggerConfigExtension.parentThreadId;
 
 			assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 			assert.strictEqual(result.output,
 				`  CALLER (${ppid}): initialized\r\n` +
-				`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-				`  CALLER (${ppid}): wait for child\r\n` +
-				`  CALLEE (${cpid}): initialized\r\n` +
-				`  CALLEE (${cpid}): terminating\r\n` +
-				`  CALLER (${ppid}): terminating\r\n`
+				`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+				`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+				`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+				`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+				`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 			);
 
 		}).timeout(100000);
@@ -661,16 +670,17 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				const cpid = debuggerConfigExtension.childProcessId;
 				const ctid = debuggerConfigExtension.childThreadId;
 				const ppid = debuggerConfigExtension.parentProcessId;
+				const ptid = debuggerConfigExtension.parentThreadId;
 
 				assert.strictEqual(childSession.name, `callee.exe #${cpid}`);
 
 				assert.strictEqual(result.output,
 					`  CALLER (${ppid}): initialized\r\n` +
-					`  CALLER (${ppid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
-					`  CALLER (${ppid}): wait for child\r\n` +
-					`  CALLEE (${cpid}): initialized\r\n` +
-					`  CALLEE (${cpid}): terminating\r\n` +
-					`  CALLER (${ppid}): terminating\r\n`
+					`  CALLER (${ppid}, ${ptid}): started process ${calleePath}; PID ${cpid}; TID ${ctid}\r\n` +
+					`  CALLER (${ppid}, ${ptid}): wait for child\r\n` +
+					`  CALLEE (${cpid}, ${ctid}): initialized\r\n` +
+					`  CALLEE (${cpid}, ${ctid}): terminating\r\n` +
+					`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 				);
 
 			}).timeout(100000);

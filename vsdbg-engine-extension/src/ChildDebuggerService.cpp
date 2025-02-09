@@ -221,6 +221,7 @@ HRESULT handle_call_to_create_process(
 
     const auto creation_flags = function_call_context.get_dwCreationFlags();
     logger.log(LogLevel::trace, thread.Connection(), L"  dwCreationFlags={}\n", creation_flags);
+    logger.log(LogLevel::trace, thread.Connection(), L"  PROCESS_INFORMATION address={:#x}\n", function_call_context.get_lpProcessInformation());
 
     // If want to suspend the child process and it is not already requested to be suspended
     // originally, we enforce a suspended process creation.
@@ -260,7 +261,7 @@ HRESULT handle_call_to_create_process(
     out_info->initialize(function_call_context.get_lpProcessInformation(), forced_suspension);
 
     CComPtr<Breakpoints::DkmRuntimeInstructionBreakpoint> breakpoint;
-    if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, nullptr, address, false, out_info, &breakpoint) != S_OK)
+    if(Breakpoints::DkmRuntimeInstructionBreakpoint::Create(source_id, &thread, address, false, out_info, &breakpoint) != S_OK)
     {
         logger.log(LogLevel::error, thread.Connection(), L"  FAILED to create breakpoint\n");
         return S_FALSE;
@@ -591,7 +592,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         //  - maybe, modify the passed arguments to force  suspended start.
         //  - create a new breakpoint that is triggered when the create process function is finished.
 
-        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}: Start CreateProcess: W {} Func {}\n", thread->Process()->LivePart()->Id, in_info->get_is_unicode(), (int)in_info->get_function_type());
+        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}, TID {}: Start CreateProcess: W {} Func {}\n", thread->Process()->LivePart()->Id, thread->SystemPart()->Id, in_info->get_is_unicode(), (int)in_info->get_function_type());
 
         switch(in_info->get_function_type())
         {
@@ -617,7 +618,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         //  - extract the process ID if of the created child process.
         //  - inform the debug client (VS Code) about the newly created process, so that it can attach to it.
 
-        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}: Finish CreateProcess\n", thread->Process()->LivePart()->Id);
+        logger_.log(LogLevel::trace, thread->Connection(), L"  In PID {}, TID {}: Finish CreateProcess\n", thread->Process()->LivePart()->Id, thread->SystemPart()->Id);
 
         runtime_breakpoint->Close(); // Remove this breakpoint. We will create a new one for the next call.
 
@@ -641,6 +642,7 @@ HRESULT STDMETHODCALLTYPE CChildDebuggerService::OnRuntimeBreakpoint(
         // Read the process information structure from the stack. This should have been populated with information
         // about the newly created process.
         PROCESS_INFORMATION proc_info;
+        logger_.log(LogLevel::trace, thread->Connection(), L"  Reading PROCESS_INFORMATION from {:#x}...\n", out_info->get_process_information_address());
         if(thread->Process()->ReadMemory(out_info->get_process_information_address(), DkmReadMemoryFlags::None, &proc_info, sizeof(PROCESS_INFORMATION), nullptr) != S_OK)
         {
             logger_.log(LogLevel::error, thread->Connection(), L"  FAILED to read process information\n");

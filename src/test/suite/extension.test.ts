@@ -1,4 +1,4 @@
-import { assert } from 'chai';
+import { assert, expect } from 'chai';
 import { EventEmitter } from 'events';
 import * as path from 'path';
 
@@ -318,6 +318,80 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
+	}).timeout(100000);
+
+	test(`Attach multi-threaded (${arch})`, async () => {
+		vscode.window.showInformationMessage(`RUN Attach multi-threaded (${arch}).`);
+
+		const result = await startDebuggingAndWait({
+			type: "cppvsdbg",
+			name: "Parent Session",
+			request: "launch",
+			program: callerPath,
+			args: [
+				"--init-time", "0",
+				"--final-time", "0",
+				"--wait",
+				"--threads", "2",
+				calleePath,
+				"-",
+				"--sleep-time", "0"
+			],
+			console: "internalConsole",
+			autoAttachChildProcess: true,
+		});
+		assert.strictEqual(result.startedSessions.length, 3);
+
+		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
+
+		const childSession1 = result.startedSessions[1];
+		assert.isTrue('_childDebuggerExtension' in childSession1.configuration);
+
+		const childSession2 = result.startedSessions[2];
+		assert.isTrue('_childDebuggerExtension' in childSession2.configuration);
+
+		const debuggerConfigExtension1: ChildDebuggerConfigurationExtension = childSession1.configuration._childDebuggerExtension;
+
+		assert.isTrue(debuggerConfigExtension1.childSuspended);
+		assert.isTrue(debuggerConfigExtension1.parentSuspended);
+
+		const cpid1 = debuggerConfigExtension1.childProcessId;
+		const ctid1 = debuggerConfigExtension1.childThreadId;
+		const ppid1 = debuggerConfigExtension1.parentProcessId;
+		const ptid1 = debuggerConfigExtension1.parentThreadId;
+
+		const debuggerConfigExtension2: ChildDebuggerConfigurationExtension = childSession2.configuration._childDebuggerExtension;
+
+		assert.isTrue(debuggerConfigExtension2.childSuspended);
+		assert.isTrue(debuggerConfigExtension2.parentSuspended);
+
+		const cpid2 = debuggerConfigExtension2.childProcessId;
+		const ctid2 = debuggerConfigExtension2.childThreadId;
+		const ppid2 = debuggerConfigExtension2.parentProcessId;
+		const ptid2 = debuggerConfigExtension2.parentThreadId;
+
+		assert.strictEqual(childSession1.name, `callee.exe #${cpid1}`);
+		assert.strictEqual(childSession2.name, `callee.exe #${cpid2}`);
+
+		assert.strictEqual(ppid1, ppid2);
+		assert.notStrictEqual(ptid1, ptid2);
+
+		const lines = result.output.split("\r\n").map((s) => s.trim()).filter((s) => s.length > 0);
+		assert.strictEqual(lines.length, 11);
+
+		expect(lines).to.include.members([
+			`CALLER (${ppid1}): initialized`,
+			`CALLER (${ppid1}, ${ptid1}): started process ${calleePath}; PID ${cpid1}; TID ${ctid1}`,
+			`CALLER (${ppid1}, ${ptid1}): wait for child`,
+			`CALLER (${ppid2}, ${ptid2}): started process ${calleePath}; PID ${cpid2}; TID ${ctid2}`,
+			`CALLER (${ppid2}, ${ptid2}): wait for child`,
+			`CALLEE (${cpid1}, ${ctid1}): initialized`,
+			`CALLEE (${cpid1}, ${ctid1}): terminating`,
+			`CALLER (${ppid1}, ${ptid1}): terminating thread`,
+			`CALLEE (${cpid2}, ${ctid2}): initialized`,
+			`CALLEE (${cpid2}, ${ctid2}): terminating`,
+			`CALLER (${ppid2}, ${ptid2}): terminating thread`
+		]);
 	}).timeout(100000);
 
 	test(`Attach only command line (${arch})`, async () => {

@@ -159,7 +159,7 @@
     "chai": "^4.4.1",
     "eslint": "^8.28.0",
     "glob": "^8.1.0",
-    "mocha": "^10.1.0",
+    "mocha": "^10.8.2",
     "node-loader": "^2.0.0",
     "ts-loader": "^9.4.1",
     "typescript": "^5.5.3",

@@ -1,6 +1,8 @@
 # Change Log
 
-## Unreleased
+## 1.2.0
+
+- Fixed an issue where the debugger got confused when multiple threads of a parent process started child processes at nearly the same time. This could manifest itself in the process picker launching is VS Code ([#30](https://github.com/albertziegenhagel/childdebugger-vscode/pull/30)).
 
 ## 1.1.0
 

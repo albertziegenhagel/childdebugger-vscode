@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <iostream>
 #include <ranges>
+#include <syncstream>
 #include <thread>
 
 #define WIN32_LEAN_AND_MEAN
@@ -373,12 +374,12 @@ auto create_output_pipes()
 
     if(CreatePipe(&out_read, &out_write, &security_attributes, 0) == FALSE)
     {
-        std::wcout << L"Failed to create out pipe." << std::endl;
+        std::wosyncstream(std::wcout) << L"Failed to create out pipe." << std::endl;
         std::quick_exit(EXIT_FAILURE);
     }
     if(CreatePipe(&err_read, &err_write, &security_attributes, 0) == FALSE)
     {
-        std::wcout << L"Failed to create err pipe." << std::endl;
+        std::wosyncstream(std::wcout) << L"Failed to create err pipe." << std::endl;
         std::quick_exit(EXIT_FAILURE);
     }
 
@@ -464,7 +465,7 @@ DWORD run_create_process(const Options&       opts,
         HANDLE user_token;
         if(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY, &user_token) != TRUE)
         {
-            std::wcout << L"Failed to get user token of current process." << std::endl;
+            std::wosyncstream(std::wcout) << L"Failed to get user token of current process." << std::endl;
             std::quick_exit(EXIT_FAILURE);
         }
 
@@ -518,7 +519,7 @@ DWORD run_create_process(const Options&       opts,
         HANDLE token = nullptr;
         if(OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &token) != TRUE)
         {
-            std::wcout << L"Failed to get token of current process." << std::endl;
+            std::wosyncstream(std::wcout) << L"Failed to get token of current process." << std::endl;
             std::quick_exit(EXIT_FAILURE);
         }
 
@@ -526,7 +527,7 @@ DWORD run_create_process(const Options&       opts,
         if(DuplicateTokenEx(token, TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID, nullptr, SecurityImpersonation, TokenPrimary, &token_duplicate) != TRUE)
         {
             CloseHandle(token);
-            std::wcout << L"Failed to duplicate process token." << std::endl;
+            std::wosyncstream(std::wcout) << L"Failed to duplicate process token." << std::endl;
             std::quick_exit(EXIT_FAILURE);
         }
 
@@ -605,18 +606,19 @@ int start_child(const Options& opts)
     const auto result = run_create_process(opts, process_info);
     if(result == FALSE)
     {
-        std::wcout << L"  CALLER (" << pid << L", " << tid << L"): failed to create child process: " << GetLastError() << std::endl;
+        const auto error_code = GetLastError();
+        std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): failed to create child process: " << error_code << std::endl;
         return EXIT_FAILURE;
     }
 
-    std::wcout << L"  CALLER (" << pid << L", " << tid << L"): started process " << opts.child_path.c_str() << L"; PID " << process_info.dwProcessId << L"; TID " << process_info.dwThreadId << std::endl;
+    std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): started process " << opts.child_path.c_str() << L"; PID " << process_info.dwProcessId << L"; TID " << process_info.dwThreadId << std::endl;
 
     if(opts.suspend)
     {
         auto* const child_main_thread = OpenThread(THREAD_SUSPEND_RESUME, 0, process_info.dwThreadId);
         if(child_main_thread == nullptr)
         {
-            std::wcout << L"  CALLER (" << pid << L", " << tid << L"): failed to open child process thread: " << result << std::endl;
+            std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): failed to open child process thread: " << result << std::endl;
             CloseHandle(process_info.hThread);
             CloseHandle(process_info.hProcess);
             return EXIT_FAILURE;
@@ -625,7 +627,7 @@ int start_child(const Options& opts)
         std::this_thread::sleep_for(opts.suspend_sleep_time);
 
         ResumeThread(child_main_thread);
-        std::wcout << L"  CALLER (" << pid << L", " << tid << L"): resumed child" << std::endl;
+        std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): resumed child" << std::endl;
         CloseHandle(child_main_thread);
     }
 
@@ -633,11 +635,11 @@ int start_child(const Options& opts)
 
     if(opts.wait)
     {
-        std::wcout << L"  CALLER (" << pid << L", " << tid << L"): wait for child" << std::endl;
+        std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): wait for child" << std::endl;
         WaitForSingleObject(process_info.hProcess, INFINITE);
     }
 
-    std::wcout << L"  CALLER (" << pid << L", " << tid << L"): terminating thread" << std::endl;
+    std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L", " << tid << L"): terminating thread" << std::endl;
 
     CloseHandle(process_info.hThread);
     CloseHandle(process_info.hProcess);
@@ -652,7 +654,7 @@ int wmain(int argc, wchar_t* argv[])
 
     const auto pid = GetCurrentProcessId();
 
-    std::wcout << L"  CALLER (" << pid << L"): initialized" << std::endl;
+    std::wosyncstream(std::wcout) << L"  CALLER (" << pid << L"): initialized" << std::endl;
 
     std::this_thread::sleep_for(opts.init_sleep_time);
 

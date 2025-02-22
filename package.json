@@ -5,7 +5,7 @@
   "author": "Albert Ziegenhagel",
   "publisher": "albertziegenhagel",
   "license": "MIT",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "homepage": "https://github.com/albertziegenhagel/childdebugger-vscode",
   "bugs": {
     "url": "https://github.com/albertziegenhagel/childdebugger-vscode/issues"

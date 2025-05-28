@@ -83,6 +83,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			],
 			console: "internalConsole",
 			autoAttachChildProcess: true,
+			visualizerFile: "parent.natvis",
 		});
 		assert.strictEqual(result.startedSessions.length, 2);
 
@@ -90,6 +91,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 
 		const childSession = result.startedSessions[1];
 		assert.isTrue('_childDebuggerExtension' in childSession.configuration);
+		assert.strictEqual(childSession.configuration.visualizerFile, "parent.natvis");
 
 		const debuggerConfigExtension: ChildDebuggerConfigurationExtension = childSession.configuration._childDebuggerExtension;
 

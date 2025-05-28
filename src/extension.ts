@@ -130,8 +130,9 @@ export function activate(context: vscode.ExtensionContext) {
 						_childDebuggerExtension: configurationExtension,
 						// always attach to children of children
 						autoAttachChildProcess: true,
+						visualizerFile: session.configuration.visualizerFile,
 						// TODO: should we copy other configuration properties (like `symbolOptions`)
-						//       from the parent to the child?
+						//       from the parent to the child?,
 					};
 					const options: vscode.DebugSessionOptions = {
 						parentSession: session,

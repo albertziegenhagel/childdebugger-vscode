@@ -64,14 +64,14 @@ jobs:
     if: needs.check.outputs.is_newer == 1
 
     steps:
-      - name: Download build artifact (vsix)
+      - name: Download build artifact (vsix, x64)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: package.yml
           run_id: ${{ github.event.workflow_run.id }}
           name: childdebugger-win32-x64
 
-      - name: Download build artifacts (tests)
+      - name: Download build artifacts (tests, x64)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: package.yml
@@ -79,7 +79,7 @@ jobs:
           name: childdebugger-win32-x64-tests
           skip_unpack: true
 
-      - name: Download build artifacts (debug symbols)
+      - name: Download build artifacts (debug symbols, x64)
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: package.yml
@@ -87,7 +87,30 @@ jobs:
           name: childdebugger-win32-x64-debug-symbols
           skip_unpack: true
 
-      - name: Upload release asset (vsix)
+      - name: Download build artifact (vsix, arm64)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: childdebugger-win32-arm64
+
+      - name: Download build artifacts (tests, arm64)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: childdebugger-win32-arm64-tests
+          skip_unpack: true
+
+      - name: Download build artifacts (debug symbols, arm64)
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: package.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: childdebugger-win32-arm64-debug-symbols
+          skip_unpack: true
+
+      - name: Upload release asset (vsix, x64)
         shell: pwsh
         run: |
           $assetId = curl -L `
@@ -116,7 +139,7 @@ jobs:
           --data-binary "@childdebugger-win32-x64.vsix" `
           "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-x64.vsix"
 
-      - name: Upload release asset (tests)
+      - name: Upload release asset (tests, x64)
         shell: pwsh
         run: |
           $assetId = curl -L `
@@ -145,7 +168,7 @@ jobs:
           --data-binary "@childdebugger-win32-x64-tests.zip" `
           "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-x64-tests.zip"
 
-      - name: Upload release asset (debug-sybols)
+      - name: Upload release asset (debug-symbols, x64)
         shell: pwsh
         run: |
           $assetId = curl -L `
@@ -173,6 +196,93 @@ jobs:
           -H "Content-Type: application/zip" `
           --data-binary "@childdebugger-win32-x64-debug-symbols.zip" `
           "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-x64-debug-symbols.zip"
+
+      - name: Upload release asset (vsix, arm64)
+        shell: pwsh
+        run: |
+          $assetId = curl -L `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets | `
+          ConvertFrom-Json | `
+          Where-Object -Property name -Value "childdebugger-win32-arm64.vsix" -EQ | `
+          Select-Object -Expand id
+
+          if($assetId) {
+            curl -L `
+            -X DELETE `
+            -H "Accept: application/vnd.github+json" `
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"`
+            -H "X-GitHub-Api-Version: 2022-11-28" `
+            https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/assets/$assetId
+          }
+
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@childdebugger-win32-arm64.vsix" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-arm64.vsix"
+
+      - name: Upload release asset (tests, arm64)
+        shell: pwsh
+        run: |
+          $assetId = curl -L `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets | `
+          ConvertFrom-Json | `
+          Where-Object -Property name -Value "childdebugger-win32-arm64-tests.zip" -EQ | `
+          Select-Object -Expand id
+
+          if($assetId) {
+            curl -L `
+            -X DELETE `
+            -H "Accept: application/vnd.github+json" `
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"`
+            -H "X-GitHub-Api-Version: 2022-11-28" `
+            https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/assets/$assetId
+          }
+
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@childdebugger-win32-arm64-tests.zip" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-arm64-tests.zip"
+
+      - name: Upload release asset (debug-symbols, arm64)
+        shell: pwsh
+        run: |
+          $assetId = curl -L `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets | `
+          ConvertFrom-Json | `
+          Where-Object -Property name -Value "childdebugger-win32-arm64-debug-symbols.zip" -EQ | `
+          Select-Object -Expand id
+
+          if($assetId) {
+            curl -L `
+            -X DELETE `
+            -H "Accept: application/vnd.github+json" `
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"`
+            -H "X-GitHub-Api-Version: 2022-11-28" `
+            https://api.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/assets/$assetId
+          }
+
+          curl -i -X POST `
+          -H "Accept: application/vnd.github+json" `
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" `
+          -H "X-GitHub-Api-Version: 2022-11-28" `
+          -H "Content-Type: application/zip" `
+          --data-binary "@childdebugger-win32-arm64-debug-symbols.zip" `
+          "https://uploads.github.com/repos/albertziegenhagel/childdebugger-vscode/releases/126145941/assets?name=childdebugger-win32-arm64-debug-symbols.zip"
 
   publish:
     name: "Puplish"

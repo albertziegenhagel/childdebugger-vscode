@@ -12,7 +12,22 @@ permissions:
 
 jobs:
   package:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.run-on }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        run-on: [windows-latest, windows-11-arm]
+        node-version: [any]
+        include:
+          - run-on: windows-latest
+            node-version: 18.17
+            arch: x64
+          - run-on: windows-11-arm
+            node-version: 20
+            arch: arm64
+        exclude:
+          - node-version: any
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +36,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.17
+          node-version: ${{ matrix.node-version }}
 
       - name: Install VSCE
         run: npm install -g @vscode/vsce
@@ -44,6 +59,29 @@ jobs:
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
   
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
+        if: matrix.run-on == 'windows-11-arm'
+        with:
+          arch: arm64
+
+      - name: Configure VSDbg Engine Extension (arm64)
+        if: matrix.run-on == 'windows-11-arm'
+        run: |
+          mkdir build/arm64
+          cd build/arm64
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
+
+      - name: Build & Install VSDbg Engine Extension (arm64)
+        if: matrix.run-on == 'windows-11-arm'
+        run: |
+          cd build/arm64
+          ninja install
+
       - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
@@ -92,20 +130,24 @@ jobs:
 
       - name: Package VSIX
         run: |
-          vsce package --target win32-x64 --pre-release
-          mv childdebugger-win32-x64-*.vsix childdebugger-win32-x64.vsix
+          vsce package --target win32-${{ matrix.arch }} --pre-release
+          mv childdebugger-win32-${{ matrix.arch }}-*.vsix childdebugger-win32-${{ matrix.arch }}.vsix
 
       - name: Upload extension VSIX
         uses: actions/upload-artifact@v4
         with: 
-          name: childdebugger-win32-x64
+          name: childdebugger-win32-${{ matrix.arch }}
           path: ${{ github.workspace }}/*.vsix
 
       - name: Upload test binaries
         uses: actions/upload-artifact@v4
         with:
-          name: childdebugger-win32-x64-tests
+          name: childdebugger-win32-${{ matrix.arch }}-tests
           path: |
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/arm64/caller.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/arm64/caller.pdb
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/arm64/callee.exe
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/arm64/callee.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.exe
             ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/caller.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/tests/x64/callee.exe
@@ -119,8 +161,9 @@ jobs:
       - name: Upload debug symbols
         uses: actions/upload-artifact@v4
         with:
-          name: childdebugger-win32-x64-debug-symbols
+          name: childdebugger-win32-${{ matrix.arch }}-debug-symbols
           path: |
+            ${{ github.workspace }}/vsdbg-engine-extension/bin/arm64/ChildDebugger.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/x64/ChildDebugger.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/x86/ChildDebugger.pdb
             ${{ github.workspace }}/vsdbg-engine-extension/bin/info.txt

@@ -17,14 +17,19 @@ async function main() {
 		const [cliPath, ...args] = resolveCliArgsFromVSCodeExecutablePath(vscodeExecutablePath);
 
 		// Use cp.spawn / cp.exec for custom setup
-		cp.spawnSync(
+		console.info('Install dependencies:');
+		console.info(`  ${cliPath} ${args}`);
+		const result = cp.spawnSync(
 			cliPath,
 			[...args, '--install-extension', 'ms-vscode.cpptools'],
 			{
-				encoding: 'utf-8',
-				stdio: 'inherit'
+				shell: true
 			}
 		);
+		console.info(`  status: ${result.status}`);
+		console.info(`  stdout: ${result.stdout}`);
+		console.info(`  stderr: ${result.stderr}`);
+		console.info(`  error:  ${result.error}`);
 
 		// Download VS Code, unzip it and run the integration test
 		await runTests({ extensionDevelopmentPath, extensionTestsPath });

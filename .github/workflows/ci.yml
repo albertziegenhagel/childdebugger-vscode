@@ -8,17 +8,31 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.run-on }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        run-on: [windows-latest, windows-11-arm]
+        node-version: [any]
+        include:
+          - run-on: windows-latest
+            node-version: 18.17
+          - run-on: windows-11-arm
+            node-version: 20
+        exclude:
+          - node-version: any
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.17
+          node-version: ${{ matrix.node-version }}
 
       - name: Create Test User
         run: |
+          Import-Module Microsoft.PowerShell.LocalAccounts -UseWindowsPowerShell
           $PW = "Rb4Z7X9d(pf$%*?S=dG@VaMZe" | ConvertTo-SecureString  -AsPlainText -Force
           New-LocalUser -Name "TestUser" -Password $PW
 
@@ -42,6 +56,29 @@ jobs:
         run: |
           nuget install Microsoft.VSSDK.Debugger.VSDebugEng -Version 17.0.2012801
           nuget install Microsoft.VSSDK.Debugger.VSDConfigTool -Version 17.0.2012801
+
+      - uses: TheMrMilchmann/setup-msvc-dev@v3
+        if: matrix.run-on == 'windows-11-arm'
+        with:
+          arch: arm64
+
+      - name: Configure VSDbg Engine Extension (arm64)
+        if: matrix.run-on == 'windows-11-arm'
+        run: |
+          mkdir build/arm64
+          cd build/arm64
+          cmake "${{ github.workspace }}\vsdbg-engine-extension" `
+          -G Ninja `
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDebugEng.17.0.2012801\build\native;${{ github.workspace }}\Microsoft.VSSDK.Debugger.VSDConfigTool.17.0.2012801\build" `
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}\vsdbg-engine-extension" `
+          -DCHILDDEBUGGER_INSTALL_PDB=ON
+  
+      - name: Build & Install VSDbg Engine Extension (arm64)
+        if: matrix.run-on == 'windows-11-arm'
+        run: |
+          cd build/arm64
+          ninja install
 
       - uses: TheMrMilchmann/setup-msvc-dev@v3
         with:

@@ -114,7 +114,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`No attach (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN No attach (${arch}).`);
@@ -137,7 +137,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions.length, 1);
 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Disabled attach (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Disabled attach (${arch}).`);
@@ -161,7 +161,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 		assert.strictEqual(result.startedSessions.length, 1);
 
 		assert.strictEqual(result.startedSessions[0].name, "Parent Session");
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach non existent (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN non existent (${arch}).`);
@@ -189,7 +189,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 
 		assert.include(result.output, "failed to create child process");
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach recursive (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach recursive (${arch}).`);
@@ -267,7 +267,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid1}, ${ptid1}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach suspended (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach suspended (${arch}).`);
@@ -320,7 +320,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach multi-threaded (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach multi-threaded (${arch}).`);
@@ -394,7 +394,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`CALLEE (${cpid2}, ${ctid2}): terminating`,
 			`CALLER (${ppid2}, ${ptid2}): terminating thread`
 		]);
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach only command line (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach Only Command Line (${arch}).`);
@@ -445,7 +445,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach once ANSI (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach ANSI (${arch}).`);
@@ -496,7 +496,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach only command line ANSI (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach Only Command Line ANSI (${arch}).`);
@@ -548,7 +548,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach once User (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach user (${arch}).`);
@@ -599,7 +599,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	test(`Attach once User ANSI (${arch})`, async () => {
 		vscode.window.showInformationMessage(`RUN Attach user ANSI (${arch}).`);
@@ -651,7 +651,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 			`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 		);
 
-	}).timeout(100000);
+	}).timeout(400000);
 
 	if (process.env.CHILDDEBUGGER_TEST_IS_ADMIN === "1") {
 
@@ -704,7 +704,7 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 				`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 			);
 
-		}).timeout(100000);
+		}).timeout(400000);
 
 		if (process.env.CHILDDEBUGGER_TEST_HAS_TEST_USER === "1") {
 
@@ -759,11 +759,24 @@ function testArchitecture(callerPath: string, calleePath: string, arch: string) 
 					`  CALLER (${ppid}, ${ptid}): terminating thread\r\n`
 				);
 
-			}).timeout(100000);
+			}).timeout(400000);
 		}
 	}
 
 }
+
+suite('Auto attach arm64', () => {
+	if (process.arch !== 'arm64') {
+		return;
+	}
+
+	const testExeDirArm64 = path.join(__dirname, "..", "..", "..", "vsdbg-engine-extension", "bin", "tests", "arm64");
+
+	const callerPathArm64 = path.join(testExeDirArm64, "caller.exe");
+	const calleePathArm64 = path.join(testExeDirArm64, "callee.exe");
+
+	testArchitecture(callerPathArm64, calleePathArm64, "arm64");
+});
 
 suite('Auto attach x64', () => {
 	const testExeDirX64 = path.join(__dirname, "..", "..", "..", "vsdbg-engine-extension", "bin", "tests", "x64");
@@ -775,6 +788,10 @@ suite('Auto attach x64', () => {
 });
 
 suite('Auto attach x86', () => {
+	if (process.arch === 'arm64') {
+		return;
+	}
+
 	const testExeDirX86 = path.join(__dirname, "..", "..", "..", "vsdbg-engine-extension", "bin", "tests", "x86");
 
 	const callerPathX86 = path.join(testExeDirX86, "caller.exe");

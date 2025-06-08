@@ -27,11 +27,12 @@ It is intended to be the VS Code equivalent of the [Microsoft Child Process Debu
 
 ## Installation
 
-> NOTE: pre-build binaries are currently available for Windows x86-64 only.
-
 This extension has been published to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=albertziegenhagel.childdebugger).
 
 It is suggested to install the latest release via VS Code's extension manager.
+
+> NOTE: official pre-build binaries are currently available for Windows x86-64 only.
+>       Support for Windows ARM64 is experimental and binaries have not been published to the Marketplace yet, but can be download from the [Rolling release](https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head).
 
 When installed in VS Code, the extension will automatically install an integration into the VS Debug Engine when it is activated. You can confirm that this integration was installed successfully by checking that you see something similar to 
 

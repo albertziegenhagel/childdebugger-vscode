@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Allow natvis visualization in child sessions ([#34](https://github.com/albertziegenhagel/childdebugger-vscode/pull/34)).
+- Experimental ARM64 support. Pre-build packages are available in the ["Rolling release"](https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head), but not in the VS Marketplace yet. ([#34](https://github.com/albertziegenhagel/childdebugger-vscode/pull/34)).
+
 ## 1.2.0
 
 - Fixed an issue where the debugger got confused when multiple threads of a parent process started child processes at nearly the same time. This could manifest itself in the process picker launching is VS Code ([#30](https://github.com/albertziegenhagel/childdebugger-vscode/pull/30)).

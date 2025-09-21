@@ -3,7 +3,7 @@
 ## 1.3.0
 
 - Allow natvis visualization in child sessions ([#34](https://github.com/albertziegenhagel/childdebugger-vscode/pull/34)).
-- Experimental ARM64 support. Pre-build packages are available in the ["Rolling release"](https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head), but not in the VS Marketplace yet. ([#34](https://github.com/albertziegenhagel/childdebugger-vscode/pull/34)).
+- Experimental ARM64 support. Pre-build packages are available in the ["Rolling release"](https://github.com/albertziegenhagel/childdebugger-vscode/releases/tag/head), but not in the VS Marketplace yet. ([#37](https://github.com/albertziegenhagel/childdebugger-vscode/pull/37)).
 
 ## 1.2.0
 

@@ -1,5 +1,10 @@
 # Change Log
 
+## [Unreleased]
+
+- Copy logging and symbol configurations from parent to child debug sessions ([#42](https://github.com/albertziegenhagel/childdebugger-vscode/pull/42)).
+- Bump a lot of dependencies. ([#40](https://github.com/albertziegenhagel/childdebugger-vscode/pull/40), [#41](https://github.com/albertziegenhagel/childdebugger-vscode/pull/41), [#44](https://github.com/albertziegenhagel/childdebugger-vscode/pull/44), [#45](https://github.com/albertziegenhagel/childdebugger-vscode/pull/45), [#46](https://github.com/albertziegenhagel/childdebugger-vscode/pull/46), [#47](https://github.com/albertziegenhagel/childdebugger-vscode/pull/47)).
+
 ## 1.3.0
 
 - Allow natvis visualization in child sessions ([#34](https://github.com/albertziegenhagel/childdebugger-vscode/pull/34)).
